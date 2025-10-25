@@ -1,0 +1,90 @@
+[gd_scene load_steps=13 format=3 uid="uid://bjcmhu45vm2wb"]
+
+[ext_resource type="Script" uid="uid://doqgdqnhr86v2" path="res://godot/scripts/ui/main_menu.gd" id="1_k7wsk"]
+[ext_resource type="Texture2D" uid="uid://d0wtv0wd31xlb" path="res://godot/assets/ui/TryOn.png" id="2_le3ah"]
+[ext_resource type="Texture2D" uid="uid://b0kvcldlnme88" path="res://godot/assets/backgrounds/WallpaperMainMenu.png" id="2_pcoab"]
+[ext_resource type="Texture2D" uid="uid://ca3w0rauwoyev" path="res://godot/assets/ui/TryOn_Pressed.png" id="3_pcoab"]
+[ext_resource type="Texture2D" uid="uid://j862itwibhgd" path="res://godot/assets/backgrounds/TShirt.png" id="3_yuq35"]
+[ext_resource type="Texture2D" uid="uid://dtkm5sm047ey3" path="res://godot/assets/ui/Settings.png" id="4_yuq35"]
+[ext_resource type="Texture2D" uid="uid://6c6yaottwbtj" path="res://godot/assets/ui/Settings_Pressed.png" id="5_6rumh"]
+[ext_resource type="Texture2D" uid="uid://cu4s58qfbo8uy" path="res://godot/assets/ui/About.png" id="6_evv25"]
+[ext_resource type="Texture2D" uid="uid://bhbc7t3g73m24" path="res://godot/assets/ui/About_Pressed.png" id="7_ql23e"]
+[ext_resource type="Texture2D" uid="uid://cslo0vr0vhayn" path="res://godot/assets/ui/Quit.png" id="8_nyw0k"]
+[ext_resource type="Texture2D" uid="uid://8idtwmvd7ka2" path="res://godot/assets/ui/Quit_Pressed.png" id="9_57ugb"]
+[ext_resource type="PackedScene" uid="uid://ycnk3o6qdt8e" path="res://godot/scenes/transitions/fade_transition.tscn" id="12_6rumh"]
+
+[node name="MainMenu" type="Node2D"]
+script = ExtResource("1_k7wsk")
+
+[node name="Fade_transition" parent="." instance=ExtResource("12_6rumh")]
+visible = false
+anchors_preset = 15
+
+[node name="Fade_timer" type="Timer" parent="Fade_transition"]
+wait_time = 0.1
+
+[node name="WallpaperMainMenu" type="Sprite2D" parent="."]
+position = Vector2(967.875, 535.75)
+scale = Vector2(2.05026, 2.23438)
+texture = ExtResource("2_pcoab")
+
+[node name="TShirt" type="Sprite2D" parent="."]
+position = Vector2(517, 620)
+scale = Vector2(1.79865, 1.66613)
+texture = ExtResource("3_yuq35")
+
+[node name="Button_manager" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+
+[node name="Start" type="TextureButton" parent="Button_manager"]
+layout_mode = 0
+offset_left = 1174.0
+offset_top = 237.0
+offset_right = 1489.0
+offset_bottom = 367.0
+scale = Vector2(1.5, 1.5)
+texture_normal = ExtResource("2_le3ah")
+texture_pressed = ExtResource("3_pcoab")
+texture_hover = ExtResource("3_pcoab")
+
+[node name="Settings" type="TextureButton" parent="Button_manager"]
+layout_mode = 0
+offset_left = 1202.0
+offset_top = 410.0
+offset_right = 1517.0
+offset_bottom = 540.0
+scale = Vector2(1.5, 1.5)
+texture_normal = ExtResource("4_yuq35")
+texture_pressed = ExtResource("5_6rumh")
+texture_hover = ExtResource("5_6rumh")
+
+[node name="About" type="TextureButton" parent="Button_manager"]
+layout_mode = 0
+offset_left = 1189.0
+offset_top = 593.0
+offset_right = 1504.0
+offset_bottom = 723.0
+scale = Vector2(1.5, 1.5)
+texture_normal = ExtResource("6_evv25")
+texture_pressed = ExtResource("7_ql23e")
+texture_hover = ExtResource("7_ql23e")
+
+[node name="Exit" type="TextureButton" parent="Button_manager"]
+layout_mode = 0
+offset_left = 1189.0
+offset_top = 759.0
+offset_right = 1504.0
+offset_bottom = 889.0
+scale = Vector2(1.5, 1.5)
+texture_normal = ExtResource("8_nyw0k")
+texture_pressed = ExtResource("9_57ugb")
+texture_hover = ExtResource("9_57ugb")
+
+[connection signal="timeout" from="Fade_transition/Fade_timer" to="." method="_on_fade_timer_timeout"]
+[connection signal="pressed" from="Button_manager/Start" to="." method="_on_start_pressed"]
+[connection signal="pressed" from="Button_manager/Settings" to="." method="_on_settings_pressed"]
+[connection signal="pressed" from="Button_manager/About" to="." method="_on_about_pressed"]
+[connection signal="pressed" from="Button_manager/Exit" to="." method="_on_exit_pressed"]
