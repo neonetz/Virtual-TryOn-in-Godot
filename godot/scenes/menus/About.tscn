@@ -8,3 +8,7 @@ script = ExtResource("1_s62ql")
 
 [node name="Fade_transition" parent="." instance=ExtResource("1_xr5ru")]
 anchors_preset = 15
+offset_left = -11.0
+offset_top = -23.0
+offset_right = 1958.0
+offset_bottom = 1112.0

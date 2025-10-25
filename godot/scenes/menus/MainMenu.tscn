@@ -16,13 +16,6 @@
 [node name="MainMenu" type="Node2D"]
 script = ExtResource("1_k7wsk")
 
-[node name="Fade_transition" parent="." instance=ExtResource("12_6rumh")]
-visible = false
-anchors_preset = 15
-
-[node name="Fade_timer" type="Timer" parent="Fade_transition"]
-wait_time = 0.1
-
 [node name="WallpaperMainMenu" type="Sprite2D" parent="."]
 position = Vector2(967.875, 535.75)
 scale = Vector2(2.05026, 2.23438)
@@ -83,8 +76,18 @@ texture_normal = ExtResource("8_nyw0k")
 texture_pressed = ExtResource("9_57ugb")
 texture_hover = ExtResource("9_57ugb")
 
-[connection signal="timeout" from="Fade_transition/Fade_timer" to="." method="_on_fade_timer_timeout"]
+[node name="Fade_transition" parent="." instance=ExtResource("12_6rumh")]
+visible = false
+anchors_preset = 15
+offset_left = -204.0
+offset_top = -24.0
+offset_right = 2105.0
+offset_bottom = 1145.0
+
+[node name="Fade_timer" type="Timer" parent="Fade_transition"]
+
 [connection signal="pressed" from="Button_manager/Start" to="." method="_on_start_pressed"]
 [connection signal="pressed" from="Button_manager/Settings" to="." method="_on_settings_pressed"]
 [connection signal="pressed" from="Button_manager/About" to="." method="_on_about_pressed"]
 [connection signal="pressed" from="Button_manager/Exit" to="." method="_on_exit_pressed"]
+[connection signal="timeout" from="Fade_transition/Fade_timer" to="." method="_on_fade_timer_timeout"]
