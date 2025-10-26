@@ -71,7 +71,8 @@ def test_components():
         'webcam_capture',
         'body_detector',
         'frame_encoder',
-        'udp_server'
+        'udp_server',
+        'clothing_overlay'
     ]
     
     for module_name in modules:

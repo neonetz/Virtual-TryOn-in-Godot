@@ -1,6 +1,5 @@
 # Video Feed Manager
-# Manages video display and updates the UI with frames from UDP client
-extends Node
+# Manages video display - shows frames received from Python
 
 # Reference to TextureRect for displaying video
 @onready var video_display: TextureRect
@@ -8,15 +7,11 @@ extends Node
 # Current frame data
 var current_image: Image = null
 var current_texture: ImageTexture = null
-var current_bbox: Array = [0, 0, 0, 0]
 
 # Performance statistics
 var frame_count: int = 0
 var last_fps_time: float = 0.0
 var current_fps: float = 0.0
-
-# Signal for other components to react to new frames
-signal video_updated(bbox: Array)
 
 
 func _ready() -> void:
@@ -41,13 +36,13 @@ func _on_frame_received(image: Image, bbox: Array) -> void:
 	"""
 	Called when a new frame is received from UDP client.
 	Updates the video display with the new frame.
+	Note: Frame already has clothing overlay from Python!
 	"""
 	if image == null:
 		return
 	
 	# Store current frame data
 	current_image = image
-	current_bbox = bbox
 	
 	# Update texture
 	if current_texture == null:
@@ -57,9 +52,6 @@ func _on_frame_received(image: Image, bbox: Array) -> void:
 	
 	# Apply texture to display
 	video_display.texture = current_texture
-	
-	# Emit signal for clothing overlay system
-	emit_signal("video_updated", bbox)
 	
 	# Update statistics
 	update_fps_counter()
@@ -86,14 +78,6 @@ func update_fps_counter() -> void:
 		current_fps = frame_count / (current_time - last_fps_time)
 		frame_count = 0
 		last_fps_time = current_time
-
-
-func get_current_bbox() -> Array:
-	"""
-	Returns the current bounding box coordinates.
-	Returns: [x, y, w, h]
-	"""
-	return current_bbox
 
 
 func get_fps() -> float:

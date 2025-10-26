@@ -1,3 +1,38 @@
 [gd_scene format=3 uid="uid://bjdn7b50pm2mj"]
 
 [node name="TryOn" type="Node2D"]
+
+[node name="UDPClient" type="Node" parent="."]
+
+[node name="VideoFeedManager" type="Node" parent="."]
+
+[node name="ClothingOverlayManager" type="Node" parent="."]
+
+[node name="TryOnController" type="Node" parent="."]
+
+[node name="VideoDisplay" type="TextureRect" parent="."]
+offset_right = 640.0
+offset_bottom = 480.0
+
+[node name="UI" type="CanvasLayer" parent="."]
+
+[node name="StatusLabel" type="Label" parent="UI"]
+offset_left = 10.0
+offset_top = 10.0
+offset_right = 98.0
+offset_bottom = 33.0
+text = "Connecting"
+
+[node name="FPSLabel" type="Label" parent="UI"]
+offset_left = 550.0
+offset_top = 10.0
+offset_right = 609.0
+offset_bottom = 33.0
+text = "FPS: 0.0"
+
+[node name="ControlsLabel" type="Label" parent="UI"]
+offset_left = 10.0
+offset_top = 400.0
+offset_right = 377.0
+offset_bottom = 423.0
+text = "Controls: ← → Switch | SPACE Toggle | ESC Back"

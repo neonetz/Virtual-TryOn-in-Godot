@@ -11,6 +11,7 @@ from webcam_capture import WebcamCapture
 from body_detector import BodyDetector
 from frame_encoder import FrameEncoder
 from udp_server import UDPServer
+from clothing_overlay import ClothingOverlay
 
 
 class VirtualTryOnServer:
@@ -32,6 +33,7 @@ class VirtualTryOnServer:
             fps=self.target_fps
         )
         self.detector = BodyDetector()
+        self.clothing = ClothingOverlay(clothes_dir="clothes")
         self.encoder = FrameEncoder(jpeg_quality=85)
         self.server = UDPServer(host='127.0.0.1', port=9999)
         
@@ -78,7 +80,7 @@ class VirtualTryOnServer:
     
     def _main_loop(self):
         """
-        Main processing loop: capture → detect → encode → broadcast.
+        Main processing loop: capture → detect → overlay → encode → broadcast.
         Maintains target FPS and displays performance statistics.
         """
         while self.is_running:
@@ -97,10 +99,13 @@ class VirtualTryOnServer:
             # Step 3: Draw detection on frame for visualization
             display_frame = self.detector.draw_detection(frame.copy(), bbox)
             
-            # Step 4: Encode frame and bbox to packet
+            # Step 4: Overlay clothing on frame (NEW!)
+            display_frame = self.clothing.overlay_clothing(display_frame, bbox)
+            
+            # Step 5: Encode frame to packet (bbox still sent for future use)
             packet = self.encoder.create_packet(display_frame, bbox)
             
-            # Step 5: Broadcast packet to all connected clients
+            # Step 6: Broadcast packet to all connected clients
             if packet is not None:
                 self.server.broadcast_packet(packet)
             
