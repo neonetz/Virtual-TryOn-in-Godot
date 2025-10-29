@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Jupyter
+.ipynb_checkpoints
+
+# Models and Data
+models/*.pkl
+models/*.joblib
+reports/*.png
+reports/*.json
+data/body/*.jpg
+data/body/*.jpeg
+data/body/*.png
+data/non_body/*.jpg
+data/non_body/*.jpeg
+data/non_body/*.png
+
+# Keep directory structure
+!models/.gitkeep
+!reports/.gitkeep
+!data/body/.gitkeep
+!data/non_body/.gitkeep
+!assets/.gitkeep
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+*.tmp
+*.log
+*.bak
