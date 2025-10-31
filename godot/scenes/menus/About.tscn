@@ -1,10 +1,19 @@
-[gd_scene load_steps=3 format=3 uid="uid://dr60wa4yxowg"]
+[gd_scene load_steps=4 format=3 uid="uid://dr60wa4yxowg"]
 
 [ext_resource type="Script" uid="uid://cuc718c81mvr0" path="res://godot/scripts/ui/about.gd" id="1_s62ql"]
 [ext_resource type="PackedScene" uid="uid://ycnk3o6qdt8e" path="res://godot/scenes/transitions/fade_transition.tscn" id="1_xr5ru"]
+[ext_resource type="Texture2D" uid="uid://csjv5uqvmpj6j" path="res://godot/assets/backgrounds/BlackWallpaper.png" id="3_0mm6c"]
 
 [node name="About" type="Node2D"]
 script = ExtResource("1_s62ql")
 
 [node name="Fade_transition" parent="." instance=ExtResource("1_xr5ru")]
-anchors_preset = 15
+offset_left = -95.0
+offset_top = -35.0
+offset_right = 1985.0
+offset_bottom = 1149.0
+
+[node name="BlackWallpaper" type="Sprite2D" parent="."]
+position = Vector2(978, 568)
+scale = Vector2(1.3125, 1.22083)
+texture = ExtResource("3_0mm6c")
