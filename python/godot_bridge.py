@@ -1,26 +1,37 @@
 """
-Godot Integration Bridge
-=========================
-Provides a simple HTTP server that Godot can call to perform face detection
-and mask overlay. This enables the Python CV pipeline to work with Godot.
+Godot Integration Bridge - UDP Version
+=======================================
+High-performance UDP server for real-time face detection and mask overlay.
+UDP is faster than HTTP for video streaming (no TCP overhead).
 
 Usage:
-    python godot_bridge.py --port 5000 --models_dir models --mask assets/mask.png
+    python godot_bridge_udp.py --port 8888 --models_dir models --mask assets/mask.png
 
-Godot can then make HTTP requests to:
-    POST http://localhost:5000/detect
-    Body: { "image_base64": "..." }
-    Response: { "faces": [...], "image_base64": "..." }
+Godot will send UDP packets with image data to port 8888.
+Server responds with processed image data via UDP.
+
+Protocol:
+---------
+CLIENT → SERVER (Godot → Python):
+    [4 bytes: packet_id][4 bytes: data_length][N bytes: JPEG image data]
+
+SERVER → CLIENT (Python → Godot):
+    [4 bytes: packet_id][4 bytes: num_faces][4 bytes: data_length][face_data][JPEG image data]
+    
+Face data format (per face):
+    [4 bytes: x][4 bytes: y][4 bytes: w][4 bytes: h][4 bytes: score (float)]
 """
 
 import sys
 import os
-import base64
-import io
-from flask import Flask, request, jsonify
+import socket
+import struct
+import threading
+import time
 import cv2
 import numpy as np
 import argparse
+from queue import Queue, Empty
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
@@ -28,192 +39,238 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 from src.inference import Inferencer
 
 
-app = Flask(__name__)
-inferencer = None
-
-
-def decode_base64_image(base64_string):
-    """Decode base64 string to OpenCV image."""
-    img_data = base64.b64decode(base64_string)
-    nparr = np.frombuffer(img_data, np.uint8)
-    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    return img
-
-
-def encode_image_base64(img):
-    """Encode OpenCV image to base64 string."""
-    _, buffer = cv2.imencode('.jpg', img)
-    img_base64 = base64.b64encode(buffer).decode('utf-8')
-    return img_base64
-
-
-@app.route('/health', methods=['GET'])
-def health():
-    """Health check endpoint."""
-    return jsonify({
-        'status': 'ok',
-        'message': 'Face detector is running'
-    })
-
-
-@app.route('/detect', methods=['POST'])
-def detect():
+class UDPFaceDetectorServer:
     """
-    Detect faces and overlay mask.
+    UDP server for real-time face detection and mask overlay.
+    Uses non-blocking UDP socket for high performance.
+    """
     
-    Request JSON:
-        {
-            "image_base64": "base64 encoded image",
-            "overlay_mask": true/false (optional, default true),
-            "draw_boxes": true/false (optional, default false)
-        }
+    def __init__(
+        self,
+        host: str = '127.0.0.1',
+        port: int = 8888,
+        models_dir: str = 'models',
+        mask_path: str = None,
+        buffer_size: int = 65535
+    ):
+        """
+        Initialize UDP server.
+        
+        Args:
+            host: Host address to bind to
+            port: UDP port number
+            models_dir: Directory with trained models
+            mask_path: Path to mask PNG
+            buffer_size: UDP buffer size (max 65535 bytes)
+        """
+        self.host = host
+        self.port = port
+        self.buffer_size = buffer_size
+        self.running = False
+        
+        # Initialize inferencer
+        print("\nInitializing face detector...")
+        try:
+            self.inferencer = Inferencer(
+                models_dir=models_dir,
+                mask_path=mask_path
+            )
+            print("✓ Face detector ready")
+        except Exception as e:
+            print(f"✗ Failed to initialize: {e}")
+            raise
+        
+        # Create UDP socket
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.sock.bind((self.host, self.port))
+        self.sock.settimeout(0.1)  # Non-blocking with 100ms timeout
+        
+        # Statistics
+        self.packets_received = 0
+        self.packets_sent = 0
+        self.errors = 0
+        self.start_time = time.time()
+        
+        print(f"✓ UDP server bound to {self.host}:{self.port}")
     
-    Response JSON:
-        {
-            "faces": [
-                {"x": int, "y": int, "w": int, "h": int, "score": float},
-                ...
-            ],
-            "image_base64": "base64 encoded result image",
-            "num_faces": int
-        }
-    """
-    try:
-        data = request.get_json()
+    def decode_image(self, data: bytes) -> np.ndarray:
+        """
+        Decode JPEG image from bytes.
         
-        if 'image_base64' not in data:
-            return jsonify({'error': 'Missing image_base64'}), 400
-        
-        # Decode image
-        img = decode_base64_image(data['image_base64'])
-        
-        if img is None:
-            return jsonify({'error': 'Failed to decode image'}), 400
-        
-        # Options
-        overlay_mask = data.get('overlay_mask', True)
-        draw_boxes = data.get('draw_boxes', False)
-        
-        # Detect faces
-        boxes, scores = inferencer.detect_faces(img)
-        
-        # Process output
-        output = img.copy()
-        
-        if overlay_mask and inferencer.mask_overlay is not None and len(boxes) > 0:
-            output = inferencer.mask_overlay.overlay_on_faces(output, boxes)
-        
-        if draw_boxes and len(boxes) > 0:
-            from src.utils import draw_face_detections
-            output = draw_face_detections(output, boxes, scores)
-        
-        # Encode result
-        result_base64 = encode_image_base64(output)
-        
-        # Format faces
-        faces = [
-            {
-                'x': int(x),
-                'y': int(y),
-                'w': int(w),
-                'h': int(h),
-                'score': float(score)
-            }
-            for (x, y, w, h), score in zip(boxes, scores)
-        ]
-        
-        return jsonify({
-            'faces': faces,
-            'image_base64': result_base64,
-            'num_faces': len(faces)
-        })
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/update_mask', methods=['POST'])
-def update_mask():
-    """
-    Update the mask template.
+        Args:
+            data: JPEG image bytes
+            
+        Returns:
+            OpenCV image (BGR)
+        """
+        nparr = np.frombuffer(data, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        return img
     
-    Request JSON:
-        {
-            "mask_path": "path/to/new/mask.png"
-        }
-    """
-    try:
-        data = request.get_json()
+    def encode_image(self, img: np.ndarray, quality: int = 85) -> bytes:
+        """
+        Encode OpenCV image to JPEG bytes.
         
-        if 'mask_path' not in data:
-            return jsonify({'error': 'Missing mask_path'}), 400
+        Args:
+            img: OpenCV image (BGR)
+            quality: JPEG quality (0-100)
+            
+        Returns:
+            JPEG bytes
+        """
+        encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), quality]
+        _, buffer = cv2.imencode('.jpg', img, encode_param)
+        return buffer.tobytes()
+    
+    def process_request(self, data: bytes, addr: tuple) -> bytes:
+        """
+        Process detection request and create response.
         
-        mask_path = data['mask_path']
+        Args:
+            data: Request data from client
+            addr: Client address (host, port)
+            
+        Returns:
+            Response bytes to send back
+        """
+        try:
+            # Parse request: [packet_id][data_length][image_data]
+            if len(data) < 8:
+                raise ValueError("Invalid packet: too short")
+            
+            packet_id = struct.unpack('I', data[0:4])[0]
+            data_length = struct.unpack('I', data[4:8])[0]
+            image_data = data[8:8+data_length]
+            
+            # Decode image
+            img = self.decode_image(image_data)
+            if img is None:
+                raise ValueError("Failed to decode image")
+            
+            # Detect faces
+            boxes, scores = self.inferencer.detect_faces(img)
+            
+            # Overlay mask if available
+            output = img.copy()
+            if self.inferencer.mask_overlay is not None and len(boxes) > 0:
+                output = self.inferencer.mask_overlay.overlay_on_faces(output, boxes)
+            
+            # Encode result image
+            result_image_data = self.encode_image(output, quality=85)
+            
+            # Build response: [packet_id][num_faces][data_length][face_data][image_data]
+            num_faces = len(boxes)
+            
+            # Build face data: for each face: [x][y][w][h][score]
+            face_data = b''
+            for (x, y, w, h), score in zip(boxes, scores):
+                face_data += struct.pack('iiiii', int(x), int(y), int(w), int(h), int(score * 1000))  # score as int (x1000)
+            
+            # Build full response
+            response = struct.pack('III', packet_id, num_faces, len(result_image_data))
+            response += face_data
+            response += result_image_data
+            
+            return response
+            
+        except Exception as e:
+            print(f"Error processing request: {e}")
+            self.errors += 1
+            # Return error response: packet_id=0, num_faces=0, data_length=0
+            return struct.pack('III', 0, 0, 0)
+    
+    def start(self):
+        """Start UDP server."""
+        self.running = True
+        print("\n" + "="*60)
+        print("UDP FACE DETECTOR SERVER RUNNING")
+        print("="*60)
+        print(f"Listening on {self.host}:{self.port}")
+        print("Waiting for packets from Godot...")
+        print("\nPress Ctrl+C to stop\n")
         
-        if not os.path.exists(mask_path):
-            return jsonify({'error': f'Mask not found: {mask_path}'}), 404
-        
-        inferencer.set_mask(mask_path)
-        
-        return jsonify({
-            'status': 'ok',
-            'message': f'Mask updated to {mask_path}'
-        })
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        try:
+            while self.running:
+                try:
+                    # Receive packet
+                    data, addr = self.sock.recvfrom(self.buffer_size)
+                    self.packets_received += 1
+                    
+                    # Process request
+                    response = self.process_request(data, addr)
+                    
+                    # Send response back to client
+                    self.sock.sendto(response, addr)
+                    self.packets_sent += 1
+                    
+                    # Print statistics every 30 packets
+                    if self.packets_received % 30 == 0:
+                        self._print_stats()
+                    
+                except socket.timeout:
+                    # Timeout is normal (non-blocking mode)
+                    continue
+                    
+                except Exception as e:
+                    print(f"Error in main loop: {e}")
+                    self.errors += 1
+                    
+        except KeyboardInterrupt:
+            print("\n\nShutting down server...")
+        finally:
+            self.stop()
+    
+    def stop(self):
+        """Stop UDP server."""
+        self.running = False
+        self.sock.close()
+        self._print_stats()
+        print("\n✓ Server stopped")
+    
+    def _print_stats(self):
+        """Print server statistics."""
+        elapsed = time.time() - self.start_time
+        fps = self.packets_received / elapsed if elapsed > 0 else 0
+        print(f"[Stats] Packets: RX={self.packets_received} TX={self.packets_sent} "
+              f"Errors={self.errors} FPS={fps:.1f}")
 
 
 def main():
-    global inferencer
-    
-    parser = argparse.ArgumentParser(description='Godot-Python CV Bridge')
-    parser.add_argument('--port', type=int, default=5000,
-                       help='Port to run server on')
+    parser = argparse.ArgumentParser(description='Godot-Python CV Bridge (UDP)')
+    parser.add_argument('--port', type=int, default=8888,
+                       help='UDP port to listen on (default: 8888)')
     parser.add_argument('--host', type=str, default='127.0.0.1',
-                       help='Host to bind to')
+                       help='Host to bind to (default: 127.0.0.1)')
     parser.add_argument('--models_dir', type=str, default='models',
                        help='Directory with trained models')
     parser.add_argument('--mask', type=str, default=None,
                        help='Initial mask PNG path')
-    parser.add_argument('--debug', action='store_true',
-                       help='Run in debug mode')
+    parser.add_argument('--buffer_size', type=int, default=65535,
+                       help='UDP buffer size (max 65535)')
     
     args = parser.parse_args()
     
     print("="*60)
-    print("GODOT-PYTHON CV BRIDGE")
+    print("GODOT-PYTHON CV BRIDGE (UDP)")
     print("="*60)
     print(f"Host: {args.host}")
     print(f"Port: {args.port}")
     print(f"Models: {args.models_dir}")
     if args.mask:
         print(f"Mask: {args.mask}")
+    print(f"Buffer size: {args.buffer_size} bytes")
     print("="*60)
     
-    # Initialize inferencer
-    print("\nInitializing face detector...")
-    try:
-        inferencer = Inferencer(
-            models_dir=args.models_dir,
-            mask_path=args.mask
-        )
-        print("✓ Face detector ready")
-    except Exception as e:
-        print(f"✗ Failed to initialize: {e}")
-        print("\nMake sure you've trained models first:")
-        print("  python app.py train --pos_dir data/face --neg_dir data/non_face")
-        sys.exit(1)
+    # Create and start server
+    server = UDPFaceDetectorServer(
+        host=args.host,
+        port=args.port,
+        models_dir=args.models_dir,
+        mask_path=args.mask,
+        buffer_size=args.buffer_size
+    )
     
-    # Start server
-    print(f"\n✓ Server starting on http://{args.host}:{args.port}")
-    print("\nEndpoints:")
-    print(f"  GET  http://{args.host}:{args.port}/health")
-    print(f"  POST http://{args.host}:{args.port}/detect")
-    print(f"  POST http://{args.host}:{args.port}/update_mask")
-    print("\nPress Ctrl+C to stop\n")
-    
-    app.run(host=args.host, port=args.port, debug=args.debug)
+    server.start()
 
 
 if __name__ == '__main__':

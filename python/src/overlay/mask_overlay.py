@@ -24,7 +24,8 @@ class MaskOverlay:
         mask_path: str,
         scale_factor: float = 1.0,
         x_offset_ratio: float = 0.0,
-        y_offset_ratio: float = 0.0
+        y_offset_ratio: float = 0.0,
+        enable_rotation: bool = False
     ):
         """
         Initialize mask overlay engine.
@@ -34,11 +35,13 @@ class MaskOverlay:
             scale_factor: Mask size as ratio of face size (1.0 = same size)
             x_offset_ratio: Horizontal offset (-0.5 to 0.5, 0 = centered)
             y_offset_ratio: Vertical offset (-0.5 to 0.5, 0 = centered)
+            enable_rotation: Enable eye-based mask rotation
         """
         self.mask_path = mask_path
         self.scale_factor = scale_factor
         self.x_offset_ratio = x_offset_ratio
         self.y_offset_ratio = y_offset_ratio
+        self.enable_rotation = enable_rotation
         
         # Load mask image with alpha channel
         if not os.path.exists(mask_path):
@@ -60,21 +63,24 @@ class MaskOverlay:
         self,
         image: np.ndarray,
         face_bbox: Tuple[int, int, int, int],
-        preserve_aspect: bool = True
+        preserve_aspect: bool = True,
+        rotation_angle: Optional[float] = None
     ) -> np.ndarray:
         """
-        Overlay mask on a single face bounding box.
+        Overlay mask on a single face bounding box with optional rotation.
         
         Process:
         1. Calculate target mask dimensions based on face size
         2. Resize mask maintaining aspect ratio
-        3. Compute position (centered on face)
-        4. Alpha blend mask onto image
+        3. Rotate mask if angle provided (eye-based alignment)
+        4. Compute position (centered on face)
+        5. Alpha blend mask onto image
         
         Args:
             image: Background image (BGR)
             face_bbox: Face bounding box (x, y, w, h)
             preserve_aspect: Maintain mask aspect ratio during scaling
+            rotation_angle: Rotation angle in degrees (from eye detection)
             
         Returns:
             Image with mask overlaid
@@ -99,13 +105,17 @@ class MaskOverlay:
             interpolation=cv2.INTER_AREA
         )
         
-        # Step 3: Compute overlay position
-        # Center horizontally with optional offset
-        overlay_x = x + (w - target_width) // 2 + int(w * self.x_offset_ratio)
-        # Center vertically with optional offset
-        overlay_y = y + (h - target_height) // 2 + int(h * self.y_offset_ratio)
+        # Step 3: Rotate mask if angle provided
+        if rotation_angle is not None and self.enable_rotation:
+            mask_resized = self._rotate_mask(mask_resized, rotation_angle)
         
-        # Step 4: Alpha blend
+        # Step 4: Compute overlay position
+        # Center horizontally with optional offset
+        overlay_x = x + (w - mask_resized.shape[1]) // 2 + int(w * self.x_offset_ratio)
+        # Center vertically with optional offset
+        overlay_y = y + (h - mask_resized.shape[0]) // 2 + int(h * self.y_offset_ratio)
+        
+        # Step 5: Alpha blend
         result = self._alpha_blend(
             image,
             mask_resized,
@@ -114,25 +124,71 @@ class MaskOverlay:
         
         return result
     
+    def _rotate_mask(
+        self,
+        mask: np.ndarray,
+        angle: float
+    ) -> np.ndarray:
+        """
+        Rotate mask image while preserving alpha channel.
+        
+        Args:
+            mask: Mask image with alpha (BGRA)
+            angle: Rotation angle in degrees (positive = counter-clockwise)
+            
+        Returns:
+            Rotated mask with alpha
+        """
+        h, w = mask.shape[:2]
+        center = (w // 2, h // 2)
+        
+        # Compute rotation matrix
+        M = cv2.getRotationMatrix2D(center, angle, 1.0)
+        
+        # Calculate new bounding box size
+        cos = np.abs(M[0, 0])
+        sin = np.abs(M[0, 1])
+        new_w = int((h * sin) + (w * cos))
+        new_h = int((h * cos) + (w * sin))
+        
+        # Adjust rotation matrix for new size
+        M[0, 2] += (new_w / 2) - center[0]
+        M[1, 2] += (new_h / 2) - center[1]
+        
+        # Rotate with border transparency
+        rotated = cv2.warpAffine(
+            mask,
+            M,
+            (new_w, new_h),
+            flags=cv2.INTER_LINEAR,
+            borderMode=cv2.BORDER_CONSTANT,
+            borderValue=(0, 0, 0, 0)  # Transparent border
+        )
+        
+        return rotated
+    
     def overlay_on_faces(
         self,
         image: np.ndarray,
-        face_bboxes: List[Tuple[int, int, int, int]]
+        face_bboxes: List[Tuple[int, int, int, int]],
+        rotation_angles: Optional[List[float]] = None
     ) -> np.ndarray:
         """
-        Overlay mask on multiple detected faces.
+        Overlay mask on multiple detected faces with optional rotation.
         
         Args:
             image: Background image
             face_bboxes: List of face bounding boxes
+            rotation_angles: List of rotation angles (one per face, optional)
             
         Returns:
             Image with masks overlaid on all faces
         """
         result = image.copy()
         
-        for bbox in face_bboxes:
-            result = self.overlay_on_face(result, bbox)
+        for i, bbox in enumerate(face_bboxes):
+            angle = rotation_angles[i] if rotation_angles and i < len(rotation_angles) else None
+            result = self.overlay_on_face(result, bbox, rotation_angle=angle)
         
         return result
     

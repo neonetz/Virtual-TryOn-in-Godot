@@ -1,227 +1,477 @@
-# Virtual Try-On System - Complete Guide
+# Face Detection + Mask Overlay System# Face Detection + Mask Overlay System
 
-Sistem deteksi face menggunakan **ORB features + SVM classifier** dengan overlay mask secara real-time. Sistem menggunakan classical computer vision (tanpa deep learning) untuk performa tinggi (≥15 FPS).
 
----
 
-## 📋 Table of Contents
+Sistem deteksi wajah menggunakan **Classical Computer Vision** (ORB + BoVW + SVM) tanpa deep learning. Optimized untuk real-time performance (12-18 FPS).Sistem deteksi wajah menggunakan **Classical Computer Vision** (ORB + BoVW + SVM) tanpa deep learning. Optimized untuk real-time performance (15+ FPS).
 
-1. [Quick Start](#-quick-start)
+
+
+------
+
+
+
+## 🚀 Quick Start## 📋 Table of Contents
+
+
+
+### Step 1: Upload Models dari Colab1. [Quick Start](#-quick-start)
+
 2. [Installation](#-installation)
-3. [Dataset Preparation](#-dataset-preparation)
-4. [Training](#-training)
-5. [Inference](#-inference)
-6. [Stretch Features](#-stretch-features)
-7. [Architecture](#-architecture)
-8. [Troubleshooting](#-troubleshooting)
 
----
+```3. [Training (Google Colab Only)](#-training-google-colab-only)
 
-## 🚀 Quick Start
+models/4. [Inference (VS Code)](#-inference-vs-code)
 
-```bash
-# 1. Install dependencies
+├── codebook.pkl   (from Colab)5. [Dataset Requirements](#-dataset-requirements)
+
+├── svm.pkl        (from Colab)6. [Architecture](#-architecture)
+
+└── scaler.pkl     (from Colab)7. [Performance Optimization](#-performance-optimization)
+
+```8. [Troubleshooting](#-troubleshooting)
+
+
+
+### Step 2: Run Inference---
+
+
+
+```bash## 🚀 Quick Start
+
+# Webcam real-time
+
+python app.py webcam --camera 0### Inference (Local VS Code)
+
+
+
+# Single image```bash
+
+python app.py infer --image test.jpg --out result.jpg# 1. Install dependencies
+
 pip install -r requirements.txt
 
-# 2. Prepare dataset (500 face + 500 non-face images)
-python prepare_coco_dataset.py \
-  --coco_dir "D:\COCO\train2017" \
-  --annotations "D:\COCO\annotations\instances_train2017.json" \
-  --num_samples 500
+# With mask overlay
 
-# 3. Train model
-python app.py train --pos_dir data/face --neg_dir data/non_face --grid_search
+python app.py webcam --camera 0 --mask assets/masks/mask.png --show# 2. Upload trained models to models/ folder
 
-# 4. Test with webcam
-python app.py webcam --camera 0 --mask assets/masks/blue_mask.png --show
-```
+```#    - codebook.pkl (from Colab)
 
----
+#    - svm.pkl (from Colab)  
+
+**Controls:** `q` quit | `m` toggle mask | `b` toggle boxes#    - scaler.pkl (from Colab)
+
+
+
+---# 3. Run webcam inference
+
+python app.py webcam --camera 0
 
 ## 💻 Installation
 
-### Prerequisites
-- Python 3.10+
-- Webcam (untuk live demo)
-- Windows/Linux/Mac
+# 4. Run image inference
+
+```bashpython app.py infer --image test.jpg --out result.jpg
+
+# 1. Navigate```
+
+cd D:\PCDVirtualTryOn\Virtual-TryOn-in-Godot\python
+
+### Training (Google Colab Only)
+
+# 2. Virtual environment
+
+python -m venv .venv```
+
+.venv\Scripts\activate⚠️ Training NOT available in VS Code!
+
+Use train_colab.ipynb in Google Colab:
+
+# 3. Install1. Open train_colab.ipynb in Colab
+
+pip install -r requirements.txt2. Upload dataset (500+ face + 500+ non_face images)
+
+```3. Run all cells (2-5 min training)
+
+4. Download models: codebook.pkl, svm.pkl, scaler.pkl
+
+---5. Copy to VS Code models/ folder
+
+```
+
+## 🎓 Training (Google Colab ONLY)
+
+---
+
+⚠️ **Training NOT available in VS Code!**
+
+## 💻 Installation
+
+**Workflow:**
+
+1. Open `train_colab.ipynb` in Google Colab### Prerequisites
+
+2. Upload dataset: `face/` (500-1000) + `non_face/` (500-1000)- Python 3.10+
+
+3. Run all cells (2-5 min)- Webcam (untuk live demo)
+
+4. Download: `codebook.pkl`, `svm.pkl`, `scaler.pkl`- Windows/Linux/Mac
+
+5. Copy to VS Code `models/` folder
 
 ### Setup
 
+---
+
 ```bash
-# 1. Navigate to project
+
+## 📊 Dataset Requirements# 1. Navigate to project
+
 cd d:\PCDVirtualTryOn\Virtual-TryOn-in-Godot\python
 
-# 2. Create virtual environment (recommended)
-python -m venv venv
-venv\Scripts\activate  # Windows
-source venv/bin/activate  # Linux/Mac
+**Face images (500-1000):** Frontal faces, various lighting, min 640x480
 
-# 3. Install dependencies
-pip install -r requirements.txt
+# 2. Create virtual environment (recommended)
+
+**Non-face images (500-1000):** Backgrounds, objects, body parts, NO facespython -m venv venv
+
+venv\Scripts\activate  # Windows
+
+**Why both?** SVM needs positive (face) AND negative (non-face) samples!source venv/bin/activate  # Linux/Mac
+
+
+
+```# 3. Install dependencies
+
+Without non_face → False positive 90%+pip install -r requirements.txt
+
+With 1:1 balance → Accuracy 90-95%```
+
 ```
 
 ### Dependencies
 
+---
+
 ```txt
-opencv-python>=4.8.0        # Computer vision
+
+## 🏗️ Architectureopencv-python>=4.8.0        # Computer vision
+
 numpy>=1.24.0               # Array operations
-scikit-learn>=1.3.0         # SVM, k-means
-matplotlib>=3.7.0           # Plotting
-pillow>=10.0.0              # Image processing
+
+**Training (Colab):**scikit-learn>=1.3.0         # SVM, k-means
+
+1. Extract ORB → Build BoVW codebook (k=256)matplotlib>=3.7.0           # Plotting
+
+2. Train SVM → Save modelspillow>=10.0.0              # Image processing
+
 flask>=3.0.0                # Godot integration (optional)
+
+**Inference (VS Code):**```
+
+1. Load models
+
+2. Sliding window (5 scales) → Extract ORB (300 features)---
+
+3. BoVW encode → SVM classify
+
+4. Keep best detection (1 box) → Overlay mask## 📊 Dataset Preparation
+
+
+
+**File Structure:**### Ringkasan
+
+```
+
+python/**Yang dibutuhkan:**
+
+├── models/          (codebook, svm, scaler)- **Face images**: Gambar dengan wajah (500 gambar)
+
+├── src/- **Non-face images**: Gambar tanpa wajah (500 gambar)
+
+│   ├── features/    (ORB, BoVW)
+
+│   ├── detector/    (ROI, SVM)**Format:**
+
+│   ├── inference/   (Pipeline)- JPG/PNG (keduanya OK)
+
+│   └── overlay/     (Mask)- Face frontal ATAU profile (keduanya OK)
+
+├── app.py           (CLI)- Resolusi minimum: 640×480
+
+├── gui_app.py       (GUI)
+
+└── train_colab.ipynb### Metode 1: COCO Dataset (Recommended)
+
+```
+
+**Download dari Kaggle:**
+
+---- Link: https://www.kaggle.com/datasets/awsaf49/coco-2017-dataset
+
+- Ukuran: ~25GB
+
+## ⚡ Performance Optimization- Gratis, sudah ada label
+
+
+
+**Applied:****Cara Pakai:**
+
+✅ ORB: 500→300 features
+
+✅ Scales: 8→5 windows```bash
+
+✅ Frame skip: every 2 frames# 1. Download COCO dari Kaggle
+
+✅ Downscale: 50% before processing# 2. Extract ke D:\COCO\
+
+✅ Best only: 1 box (highest score)# 3. Jalankan script otomatis
+
+✅ Threshold: 0.8 (high precision)
+
+python prepare_coco_dataset.py \
+
+**Result:** FPS 3.39 → **12-18** | False positives: Many → **1 box**  --coco_dir "D:\COCO\train2017" \
+
+  --annotations "D:\COCO\annotations\instances_train2017.json" \
+
+**Tuning:**  --num_samples 500
+
+```bash
+
+python app.py webcam --threshold 0.5  # more detections# Hasil:
+
+python app.py webcam --threshold 0.9  # fewer false positives# data/face/ → 500 gambar dengan wajah
+
+```# data/non_face/ → 500 gambar tanpa wajah
+
 ```
 
 ---
-
-## 📊 Dataset Preparation
-
-### Ringkasan
-
-**Yang dibutuhkan:**
-- **Face images**: Gambar dengan wajah (500 gambar)
-- **Non-face images**: Gambar tanpa wajah (500 gambar)
-
-**Format:**
-- JPG/PNG (keduanya OK)
-- Face frontal ATAU profile (keduanya OK)
-- Resolusi minimum: 640×480
-
-### Metode 1: COCO Dataset (Recommended)
-
-**Download dari Kaggle:**
-- Link: https://www.kaggle.com/datasets/awsaf49/coco-2017-dataset
-- Ukuran: ~25GB
-- Gratis, sudah ada label
-
-**Cara Pakai:**
-
-```bash
-# 1. Download COCO dari Kaggle
-# 2. Extract ke D:\COCO\
-# 3. Jalankan script otomatis
-
-python prepare_coco_dataset.py \
-  --coco_dir "D:\COCO\train2017" \
-  --annotations "D:\COCO\annotations\instances_train2017.json" \
-  --num_samples 500
-
-# Hasil:
-# data/face/ → 500 gambar dengan wajah
-# data/non_face/ → 500 gambar tanpa wajah
-```
 
 ### Metode 2: Foto Sendiri
 
+## 🎨 Mask Overlay
+
 ```bash
-# 1. Buat folder
+
+**Requirements:** PNG with alpha (RGBA), 512×512+, transparent background# 1. Buat folder
+
 mkdir data\face
-mkdir data\non_face
 
-# 2. Copy foto
-# - Foto dengan wajah → data/face/
+**Usage:**mkdir data\non_face
+
+```bash
+
+python app.py webcam --mask assets/masks/mask.png --show# 2. Copy foto
+
+```# - Foto dengan wajah → data/face/
+
 # - Foto tanpa wajah → data/non_face/
-
-# 3. Minimal 50 gambar per kategori
-```
-
-### Metode 3: Dataset Alternatif
-
-**INRIA Person Dataset**
-- Link: https://www.kaggle.com/datasets/constantinwerner/inria-person-dataset
-- Format: PNG
-- Isi: 614 positive + 1218 negative
-
-**Penn-Fudan Database**
-- Link: https://www.kaggle.com/datasets/divyansh22/pennfudan-database
-- Format: PNG
-- Isi: 170 pedestrian images
-
-### FAQ Dataset
-
-**Q: Face frontal atau profile?**
-A: **KEDUANYA BISA**. Sistem akan detect face region.
-
-**Q: PNG atau JPG?**
-A: **KEDUANYA DIDUKUNG**. Format tidak masalah.
-
-**Q: Non-face itu apa?**
-A: Gambar TANPA wajah sama sekali (tembok, pemandangan, mobil, ruangan kosong).
-
-**Q: Berapa jumlah sample?**
-
-| Tujuan | Face + Non-Face | Training Time | Accuracy |
-|--------|-----------------|---------------|----------|
-| Testing | 50 + 50 | < 1 min | ~70-80% |
-| Demo | 100 + 100 | ~2 min | ~80-85% |
-| **Production** | **500 + 500** | **~5-10 min** | **~90-95%** |
-| High Quality | 1000 + 1000 | ~15-20 min | ~95-98% |
-
-### Struktur Folder
-
-```
-data/
-├── face/              # Positive samples
-│   ├── person1.jpg
-│   ├── person2.jpg
-│   └── ...
-└── non_face/          # Negative samples
-    ├── background1.jpg
-    ├── object1.jpg
-    └── ...
-```
 
 ---
 
-## 🎓 Training
+# 3. Minimal 50 gambar per kategori
 
-### Basic Training
+## 🔧 Troubleshooting```
+
+
+
+**No faces detected:**### Metode 3: Dataset Alternatif
+
+- Lower threshold: `--threshold 0.5`
+
+- Check models in `models/` folder**INRIA Person Dataset**
+
+- Link: https://www.kaggle.com/datasets/constantinwerner/inria-person-dataset
+
+**Low FPS:**- Format: PNG
+
+- Already optimized (frame skip, downscale, 5 scales, 300 features)- Isi: 614 positive + 1218 negative
+
+- Close other apps
+
+**Penn-Fudan Database**
+
+**Too many false positives:**- Link: https://www.kaggle.com/datasets/divyansh22/pennfudan-database
+
+- Increase threshold: `--threshold 0.9`- Format: PNG
+
+- Re-train with better non_face dataset- Isi: 170 pedestrian images
+
+
+
+**Webcam not opening:**### FAQ Dataset
+
+- Try `--camera 1`
+
+- Check if used by other apps**Q: Face frontal atau profile?**
+
+A: **KEDUANYA BISA**. Sistem akan detect face region.
+
+---
+
+**Q: PNG atau JPG?**
+
+## 📈 BenchmarksA: **KEDUANYA DIDUKUNG**. Format tidak masalah.
+
+
+
+| Samples | Training | FPS | Accuracy |**Q: Non-face itu apa?**
+
+|---------|----------|-----|----------|A: Gambar TANPA wajah sama sekali (tembok, pemandangan, mobil, ruangan kosong).
+
+| 100 | <1 min | 20-25 | ~75-80% |
+
+| 500 | 2-5 min | 12-18 | ~90-92% |**Q: Berapa jumlah sample?**
+
+| 1000 | 5-10 min | 10-15 | ~95%+ |
+
+| Tujuan | Face + Non-Face | Training Time | Accuracy |
+
+---|--------|-----------------|---------------|----------|
+
+| Testing | 50 + 50 | < 1 min | ~70-80% |
+
+## 🔬 Technical Details| Demo | 100 + 100 | ~2 min | ~80-85% |
+
+| **Production** | **500 + 500** | **~5-10 min** | **~90-95%** |
+
+**Why Classical CV?**| High Quality | 1000 + 1000 | ~15-20 min | ~95-98% |
+
+✅ Lightweight (11 KB models)
+
+✅ Fast (12-18 FPS, CPU only)### Struktur Folder
+
+✅ No GPU required
+
+✅ Train from scratch (custom dataset)```
+
+data/
+
+**Model Files:**├── face/              # Positive samples
+
+- `codebook.pkl` (10 KB): k-means visual vocabulary│   ├── person1.jpg
+
+- `svm.pkl` (1 KB): Linear SVM classifier│   ├── person2.jpg
+
+- `scaler.pkl` (0.5 KB): StandardScaler normalization│   └── ...
+
+└── non_face/          # Negative samples
+
+---    ├── background1.jpg
+
+    ├── object1.jpg
+
+## 🎯 Command Reference    └── ...
+
+```
 
 ```bash
+
+# Training (Colab only)---
+
+Open train_colab.ipynb → Run cells → Download models
+
+## 🎓 Training
+
+# Inference
+
+python app.py webcam --camera 0### Basic Training
+
+python app.py infer --image test.jpg --out result.jpg
+
+python app.py video --video input.mp4 --out output.mp4```bash
+
 python app.py train --pos_dir data/face --neg_dir data/non_face
-```
+
+# Custom threshold```
+
+python app.py webcam --threshold 0.9 --iou 0.4
 
 ### Advanced Training
 
-```bash
-python app.py train \
+# GUI
+
+python gui_app.py```bash
+
+```python app.py train \
+
   --pos_dir data/face \
-  --neg_dir data/non_face \
+
+---  --neg_dir data/non_face \
+
   --k 256 \
-  --max_desc 200000 \
+
+## 💡 Tips  --max_desc 200000 \
+
   --svm linear \
-  --grid_search \
-  --n_features 500
-```
+
+**Best Practices:**  --grid_search \
+
+- Balance dataset (1:1 face:non_face)  --n_features 500
+
+- Diverse lighting & angles```
+
+- Hard negatives (face-like objects)
 
 **Parameters:**
-- `--k`: Codebook size (visual words) - default: 256
-- `--max_desc`: Max descriptors for codebook - default: 200000
-- `--svm`: SVM kernel (linear/rbf) - default: linear
-- `--grid_search`: Enable hyperparameter tuning
+
+**Optimization Priority:**- `--k`: Codebook size (visual words) - default: 256
+
+1. Threshold tuning (free)- `--max_desc`: Max descriptors for codebook - default: 200000
+
+2. Frame skip (2x-4x speedup)- `--svm`: SVM kernel (linear/rbf) - default: linear
+
+3. Downscale (2x-3x speedup)- `--grid_search`: Enable hyperparameter tuning
+
 - `--n_features`: Number of ORB features - default: 500
 
-### Training Output
+**Gotchas:**
 
-```
-models/
+- Training ONLY in Colab### Training Output
+
+- Need BOTH face AND non-face
+
+- Models must be in `models/` folder```
+
+- Threshold: 0.8=precision, 0.5=balancedmodels/
+
 ├── codebook_k256.pkl       # BoVW codebook
-├── svm_model.pkl           # Trained SVM
+
+---├── svm_model.pkl           # Trained SVM
+
 └── orb_extractor.pkl       # ORB config
 
+## 🆘 Support
+
 reports/
-├── confusion_matrix.png    # Confusion matrix
-├── pr_curve.png            # Precision-Recall curve
-├── roc_curve.png           # ROC curve
-└── metrics.json            # Accuracy, F1, etc.
+
+**Check:**├── confusion_matrix.png    # Confusion matrix
+
+1. Models in `models/` folder├── pr_curve.png            # Precision-Recall curve
+
+2. Dependencies installed├── roc_curve.png           # ROC curve
+
+3. Webcam not used by other apps└── metrics.json            # Accuracy, F1, etc.
+
 ```
 
-### Evaluation
+**Errors:**
 
-```bash
+- "Codebook not found" → Upload models### Evaluation
+
+- "'KMeans' not subscriptable" → Fixed
+
+- "Failed to open camera" → Try `--camera 1````bash
+
 python app.py eval
-```
 
-Output: Accuracy, Precision, Recall, F1 Score, ROC AUC
+---```
+
+
+
+**Version:** 2.0 (Optimized) | **FPS:** 12-18 | **Last Updated:** Oct 30, 2025Output: Accuracy, Precision, Recall, F1 Score, ROC AUC
+
 
 ---
 

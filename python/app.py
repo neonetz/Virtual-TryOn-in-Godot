@@ -3,11 +3,17 @@ ORB+SVM Face Detector with Mask Overlay
 ========================================
 Classical Computer Vision pipeline for face detection and virtual try-on.
 
+⚠️ TRAINING: Use Google Colab (see train_colab.ipynb)
+   This script is for INFERENCE ONLY.
+
 Usage:
-    python app.py train --pos_dir data/face --neg_dir data/non_face
-    python app.py eval
     python app.py infer --image input.jpg --out output.jpg --mask assets/mask.png
     python app.py webcam --camera 0 --mask assets/mask.png --show
+    python app.py video --input video.mp4 --output output.mp4
+
+Prerequisites:
+    - Trained models from Colab: codebook.pkl, svm.pkl, scaler.pkl
+    - Place models in: models/ folder
 
 Author: Computer Vision Expert
 Date: 2025
@@ -21,77 +27,7 @@ import numpy as np
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
-from src.training import Trainer
 from src.inference import Inferencer
-
-
-def train_command(args):
-    """Execute training pipeline."""
-    print("\n" + "="*60)
-    print("TRAINING ORB+SVM FACE DETECTOR")
-    print("="*60)
-    
-    # Initialize trainer
-    trainer = Trainer(
-        pos_dir=args.pos_dir,
-        neg_dir=args.neg_dir,
-        models_dir=args.models_dir,
-        reports_dir=args.reports_dir,
-        random_state=args.seed
-    )
-    
-    # Run full pipeline
-    metrics = trainer.run_full_pipeline(
-        k=args.k,
-        max_descriptors=args.max_desc,
-        n_features=args.n_features,
-        kernel=args.svm,
-        C=args.C,
-        use_grid_search=args.grid_search
-    )
-    
-    print("\n✓ Training complete!")
-    print(f"  Test Accuracy: {metrics['accuracy']:.4f}")
-    print(f"  Test F1 Score: {metrics['f1']:.4f}")
-    print(f"  Test ROC AUC:  {metrics.get('roc_auc', 0):.4f}")
-
-
-def eval_command(args):
-    """Evaluate trained model."""
-    print("\n" + "="*60)
-    print("EVALUATING TRAINED MODEL")
-    print("="*60)
-    
-    # Check if models exist
-    if not os.path.exists(os.path.join(args.models_dir, 'svm.pkl')):
-        print("Error: No trained model found. Run 'train' first.")
-        sys.exit(1)
-    
-    # Load trainer with existing models
-    print("Loading trained models and test data...")
-    print("Note: This command requires re-loading the dataset for evaluation.")
-    print("For quick evaluation, metrics are already saved during training.")
-    
-    # Read saved metrics
-    metrics_path = os.path.join(args.reports_dir, 'test_metrics.json')
-    if os.path.exists(metrics_path):
-        import json
-        with open(metrics_path, 'r') as f:
-            metrics = json.load(f)
-        
-        print("\nTest Set Metrics:")
-        print("="*60)
-        print(f"  Accuracy:  {metrics['accuracy']:.4f}")
-        print(f"  Precision: {metrics['precision']:.4f}")
-        print(f"  Recall:    {metrics['recall']:.4f}")
-        print(f"  F1 Score:  {metrics['f1']:.4f}")
-        if 'roc_auc' in metrics and metrics['roc_auc'] is not None:
-            print(f"  ROC AUC:   {metrics['roc_auc']:.4f}")
-        print("="*60)
-        
-        print(f"\nReports saved in: {args.reports_dir}")
-    else:
-        print(f"Error: Metrics file not found at {metrics_path}")
 
 
 def infer_command(args):
@@ -99,6 +35,17 @@ def infer_command(args):
     print("\n" + "="*60)
     print("INFERENCE ON IMAGE")
     print("="*60)
+    
+    # Check if models exist
+    models_dir = args.models_dir
+    if not os.path.exists(os.path.join(models_dir, 'svm.pkl')):
+        print("❌ Error: No trained models found!")
+        print("\n📋 Steps to get models:")
+        print("  1. Open train_colab.ipynb in Google Colab")
+        print("  2. Upload dataset and run training (2-5 minutes)")
+        print("  3. Download: codebook.pkl, svm.pkl, scaler.pkl")
+        print(f"  4. Place models in: {models_dir}/")
+        sys.exit(1)
     
     # Check if mask provided
     if args.mask is None:
@@ -263,8 +210,8 @@ Examples:
                              help='Directory with trained models')
     infer_parser.add_argument('--iou', type=float, default=0.3,
                              help='NMS IoU threshold')
-    infer_parser.add_argument('--threshold', type=float, default=0.0,
-                             help='Confidence score threshold')
+    infer_parser.add_argument('--threshold', type=float, default=0.8,
+                             help='Confidence score threshold (default: 0.8 - high precision)')
     
     # Webcam command
     webcam_parser = subparsers.add_parser('webcam', help='Run webcam inference')
@@ -278,8 +225,8 @@ Examples:
                               help='Directory with trained models')
     webcam_parser.add_argument('--iou', type=float, default=0.3,
                               help='NMS IoU threshold')
-    webcam_parser.add_argument('--threshold', type=float, default=0.0,
-                              help='Confidence score threshold')
+    webcam_parser.add_argument('--threshold', type=float, default=0.8,
+                              help='Confidence score threshold (default: 0.8 - high precision)')
     
     # Video command
     video_parser = subparsers.add_parser('video', help='Run inference on video')
@@ -293,8 +240,8 @@ Examples:
                              help='Directory with trained models')
     video_parser.add_argument('--iou', type=float, default=0.3,
                              help='NMS IoU threshold')
-    video_parser.add_argument('--threshold', type=float, default=0.0,
-                             help='Confidence score threshold')
+    video_parser.add_argument('--threshold', type=float, default=0.5,
+                             help='Confidence score threshold (default: 0.5)')
     
     # Parse arguments
     args = parser.parse_args()
@@ -308,9 +255,20 @@ Examples:
     
     # Execute command
     if args.command == 'train':
-        train_command(args)
+        print("\n❌ Training is NOT available in local VS Code!")
+        print("\n📋 To train the model:")
+        print("  1. Open train_colab.ipynb in Google Colab (local or online)")
+        print("  2. Upload your dataset")
+        print("  3. Run training (2-5 minutes)")
+        print("  4. Download models: codebook.pkl, svm.pkl, scaler.pkl")
+        print("  5. Place them in models/ folder")
+        print("\n✅ Then you can run inference here!")
+        sys.exit(1)
     elif args.command == 'eval':
-        eval_command(args)
+        print("\n❌ Evaluation is NOT available in local VS Code!")
+        print("\n📋 Model metrics are shown during training in Colab.")
+        print("  Check training output for accuracy, precision, recall, F1.")
+        sys.exit(1)
     elif args.command == 'infer':
         infer_command(args)
     elif args.command == 'webcam':

@@ -25,17 +25,20 @@ class BoVWEncoder:
     Low Coupling: Independent from feature extraction and classification.
     """
     
-    def __init__(self, n_clusters: int = 256, random_state: int = 42):
+    def __init__(self, n_clusters: int = 256, random_state: int = 42, use_tfidf: bool = False):
         """
         Initialize BoVW encoder.
         
         Args:
             n_clusters: Number of visual words (codebook size, k)
             random_state: Random seed for reproducibility
+            use_tfidf: Apply TF-IDF weighting to histograms
         """
         self.n_clusters = n_clusters
         self.random_state = random_state
+        self.use_tfidf = use_tfidf
         self.kmeans = None
+        self.idf_weights = None  # Inverse Document Frequency weights
         self.is_fitted = False
         
     def build_codebook(
@@ -97,6 +100,37 @@ class BoVWEncoder:
         self.is_fitted = True
         print("Codebook built successfully")
         
+        # Compute IDF weights if TF-IDF enabled
+        if self.use_tfidf:
+            self._compute_idf_weights(descriptors_list)
+    
+    def _compute_idf_weights(self, descriptors_list: List[np.ndarray]) -> None:
+        """
+        Compute Inverse Document Frequency weights for each visual word.
+        
+        IDF(w) = log(N / df(w))
+        where N = total documents, df(w) = documents containing word w
+        
+        Args:
+            descriptors_list: List of all training descriptors
+        """
+        print("Computing IDF weights for TF-IDF...")
+        n_documents = len([d for d in descriptors_list if d is not None and len(d) > 0])
+        word_doc_counts = np.zeros(self.n_clusters)
+        
+        # Count documents containing each word
+        for desc in descriptors_list:
+            if desc is not None and len(desc) > 0:
+                desc_float = desc.astype(np.float32)
+                labels = self.kmeans.predict(desc_float)
+                unique_words = np.unique(labels)
+                word_doc_counts[unique_words] += 1
+        
+        # Compute IDF: log(N / df)
+        # Add smoothing to avoid division by zero
+        self.idf_weights = np.log((n_documents + 1) / (word_doc_counts + 1))
+        print(f"IDF weights computed for {self.n_clusters} visual words")
+        
     def encode(
         self, 
         descriptors: Optional[np.ndarray],
@@ -131,7 +165,11 @@ class BoVWEncoder:
         # Step 2: Build histogram
         histogram = np.bincount(labels, minlength=self.n_clusters).astype(np.float32)
         
-        # Step 3: Normalize
+        # Step 3: Apply TF-IDF weighting if enabled
+        if self.use_tfidf and self.idf_weights is not None:
+            histogram = histogram * self.idf_weights
+        
+        # Step 4: Normalize
         if normalize == 'l1':
             norm = np.sum(histogram)
             if norm > 0:
@@ -175,7 +213,9 @@ class BoVWEncoder:
         joblib.dump({
             'kmeans': self.kmeans,
             'n_clusters': self.n_clusters,
-            'random_state': self.random_state
+            'random_state': self.random_state,
+            'use_tfidf': self.use_tfidf,
+            'idf_weights': self.idf_weights
         }, filepath)
         print(f"Codebook saved to {filepath}")
     
@@ -191,11 +231,27 @@ class BoVWEncoder:
             Loaded BoVWEncoder instance
         """
         data = joblib.load(filepath)
-        encoder = cls(
-            n_clusters=data['n_clusters'],
-            random_state=data['random_state']
-        )
-        encoder.kmeans = data['kmeans']
+        
+        # Backward compatibility: check if data is dict or direct KMeans object
+        if isinstance(data, dict):
+            # New format: dictionary with metadata
+            encoder = cls(
+                n_clusters=data['n_clusters'],
+                random_state=data.get('random_state', 42),
+                use_tfidf=data.get('use_tfidf', False)
+            )
+            encoder.kmeans = data['kmeans']
+            encoder.idf_weights = data.get('idf_weights', None)
+        else:
+            # Old format: direct KMeans object
+            encoder = cls(
+                n_clusters=data.n_clusters,
+                random_state=42,
+                use_tfidf=False
+            )
+            encoder.kmeans = data
+            encoder.idf_weights = None
+        
         encoder.is_fitted = True
         print(f"Codebook loaded from {filepath}")
         return encoder

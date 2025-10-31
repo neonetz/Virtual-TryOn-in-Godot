@@ -68,8 +68,8 @@ class Inferencer:
         """Load all trained models."""
         print("\nLoading trained models...")
         
-        # Load ORB extractor (default config)
-        self.orb_extractor = ORBExtractor(n_features=500)
+        # Load ORB extractor (OPTIMIZED: 300 features instead of 500)
+        self.orb_extractor = ORBExtractor(n_features=300)
         
         # Load BoVW codebook
         codebook_path = os.path.join(self.models_dir, 'codebook.pkl')
@@ -84,8 +84,8 @@ class Inferencer:
             raise FileNotFoundError("SVM model or scaler not found")
         self.svm_classifier = SVMClassifier.load(svm_path, scaler_path)
         
-        # Initialize ROI proposal
-        self.roi_proposal = ROIProposal()
+        # Initialize ROI proposal (OPTIMIZED: 5 scales instead of 8)
+        self.roi_proposal = ROIProposal(window_sizes=[64, 80, 96, 128, 160])
         
         print("✓ Models loaded successfully")
     
@@ -232,7 +232,8 @@ class Inferencer:
         """
         print("\nStarting webcam inference...")
         print("Controls:")
-        print("  'm' - Toggle mask overlay")
+        print("  'h' - Toggle mask overlay (hide/show)")
+        print("  'r' - Toggle eye-based rotation")
         print("  'b' - Toggle bounding boxes")
         print("  'q' - Quit")
         
@@ -252,6 +253,12 @@ class Inferencer:
         # State
         show_mask = overlay_mask and self.mask_overlay is not None
         show_boxes = draw_boxes
+        show_rotation = False  # Eye-based rotation (disabled by default for performance)
+        
+        # Frame skip for performance (process every 2 frames)
+        frame_count = 0
+        cached_boxes = []
+        cached_scores = []
         
         while True:
             start_time = time.time()
@@ -262,14 +269,54 @@ class Inferencer:
                 print("Failed to read frame")
                 break
             
-            # Detect faces
-            boxes, scores = self.detect_faces(frame)
+            frame_count += 1
+            
+            # OPTIMIZATION: Process every 2 frames only
+            if frame_count % 2 == 0:
+                # Downscale for processing (50% size)
+                small_frame = cv2.resize(frame, None, fx=0.5, fy=0.5)
+                
+                # Detect faces on small frame
+                small_boxes, scores = self.detect_faces(small_frame)
+                
+                # Scale boxes back to original size
+                cached_boxes = [(int(x*2), int(y*2), int(w*2), int(h*2)) 
+                               for (x, y, w, h) in small_boxes]
+                cached_scores = scores
+                
+                # OPTIMIZATION: Keep only the best detection (highest score)
+                if len(cached_boxes) > 0:
+                    best_idx = np.argmax(cached_scores)
+                    cached_boxes = [cached_boxes[best_idx]]
+                    cached_scores = [cached_scores[best_idx]]
+            
+            # Use cached detections
+            boxes = cached_boxes
+            scores = cached_scores
             
             # Process output
             output = frame.copy()
             
             if show_mask and self.mask_overlay is not None and len(boxes) > 0:
-                output = self.mask_overlay.overlay_on_faces(output, boxes)
+                # Eye-based rotation if enabled
+                rotation_angles = None
+                if show_rotation:
+                    from ..detector.eye_detector import EyeDetector
+                    eye_detector = EyeDetector()
+                    rotation_angles = []
+                    
+                    for bbox in boxes:
+                        x, y, w, h = bbox
+                        face_roi = frame[y:y+h, x:x+w]
+                        eye_result = eye_detector.detect_eyes(face_roi, bbox)
+                        
+                        if eye_result:
+                            _, _, angle = eye_result
+                            rotation_angles.append(angle)
+                        else:
+                            rotation_angles.append(None)
+                
+                output = self.mask_overlay.overlay_on_faces(output, boxes, rotation_angles)
             
             if show_boxes and len(boxes) > 0:
                 output = draw_face_detections(output, boxes, scores)
@@ -298,6 +345,14 @@ class Inferencer:
                 cv2.putText(output, "Mask: OFF", (10, status_y),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
             
+            # Rotation status
+            if show_rotation:
+                cv2.putText(output, "Rotation: ON", (10, status_y + 30),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            else:
+                cv2.putText(output, "Rotation: OFF", (10, status_y + 30),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (128, 128, 128), 2)
+            
             # Display
             cv2.imshow('Face Detection + Mask Overlay', output)
             
@@ -306,9 +361,12 @@ class Inferencer:
             
             if key == ord('q'):
                 break
-            elif key == ord('m'):
+            elif key == ord('h'):  # 'h' untuk hide/show mask
                 show_mask = not show_mask
                 print(f"Mask overlay: {'ON' if show_mask else 'OFF'}")
+            elif key == ord('r'):  # 'r' untuk rotation
+                show_rotation = not show_rotation
+                print(f"Eye-based rotation: {'ON' if show_rotation else 'OFF'}")
             elif key == ord('b'):
                 show_boxes = not show_boxes
                 print(f"Bounding boxes: {'ON' if show_boxes else 'OFF'}")
