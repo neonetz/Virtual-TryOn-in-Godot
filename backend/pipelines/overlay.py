@@ -21,18 +21,20 @@ class MaskOverlay:
     
     def __init__(self, mask_path: str, 
                  cascade_eye_path: Optional[str] = None,
-                 smoothing_factor: float = 0.7,
+                 smoothing_factor: float = 0.0,  # Smooting
                  use_custom_eye_detector: bool = False,
-                 custom_eye_method: str = "orb"):
+                 custom_eye_method: str = "orb",
+                 tracker_type: str = "exponential"):
         """
         Initialize mask overlay
         
         Args:
             mask_path: Path to mask PNG with alpha channel (RGBA)
             cascade_eye_path: Optional path to haarcascade_eye.xml for rotation
-            smoothing_factor: Temporal smoothing (0=no smooth, 1=full smooth). Default 0.7 (high stability)
+            smoothing_factor: Temporal smoothing (0=instant, 1=full smooth). Default 0.3 (balanced)
             use_custom_eye_detector: If True, use custom eye detector instead of Haar
             custom_eye_method: Method for custom detector ("orb", "hough", "contour", "template")
+            tracker_type: Tracking type - "exponential", "kalman", "velocity", or "none"
         """
         # Load mask with alpha channel
         self.mask_rgba = cv2.imread(mask_path, cv2.IMREAD_UNCHANGED)
@@ -46,9 +48,37 @@ class MaskOverlay:
         self.mask_h, self.mask_w = self.mask_rgba.shape[:2]
         logger.info(f"✓ Mask loaded: {mask_path} ({self.mask_w}×{self.mask_h})")
         
-        # Temporal smoothing for stable overlay (reduce flickering)
+        # Temporal smoothing/tracking setup
+        self.tracker_type = tracker_type
         self.smoothing_factor = smoothing_factor
         self.prev_bbox = None
+        self.kalman_tracker = None
+        self.velocity_predictor = None
+        
+        # Initialize tracker based on type
+        if tracker_type == "kalman":
+            try:
+                from .kalman_tracker import KalmanBBoxTracker
+                self.kalman_tracker = KalmanBBoxTracker(
+                    process_noise=1e-3,
+                    measurement_noise=1e-1
+                )
+                logger.info(f"✓ Kalman bbox tracker initialized (zero-lag predictive tracking)")
+            except Exception as e:
+                logger.warning(f"Cannot load Kalman tracker: {e}, falling back to exponential")
+                self.tracker_type = "exponential"
+        elif tracker_type == "velocity":
+            try:
+                from .kalman_tracker import SimpleVelocityPredictor
+                self.velocity_predictor = SimpleVelocityPredictor(momentum=0.7)
+                logger.info(f"✓ Velocity predictor initialized (momentum-based tracking)")
+            except Exception as e:
+                logger.warning(f"Cannot load velocity predictor: {e}, falling back to exponential")
+                self.tracker_type = "exponential"
+        elif tracker_type == "none":
+            logger.info(f"✓ Tracking disabled (instant bbox, no smoothing)")
+        else:  # exponential
+            logger.info(f"✓ Exponential smoothing initialized (factor={smoothing_factor})")
         
         # Eye detection setup
         self.use_custom_eye_detector = use_custom_eye_detector
@@ -287,16 +317,34 @@ class MaskOverlay:
         """
         x, y, w, h = face_bbox['x'], face_bbox['y'], face_bbox['w'], face_bbox['h']
         
-        # Apply temporal smoothing to reduce flickering
-        if self.prev_bbox is not None and self.smoothing_factor > 0:
-            alpha = self.smoothing_factor
-            x = int(alpha * self.prev_bbox['x'] + (1 - alpha) * x)
-            y = int(alpha * self.prev_bbox['y'] + (1 - alpha) * y)
-            w = int(alpha * self.prev_bbox['w'] + (1 - alpha) * w)
-            h = int(alpha * self.prev_bbox['h'] + (1 - alpha) * h)
+        # Apply tracking/smoothing based on tracker type
+        if self.tracker_type == "kalman" and self.kalman_tracker is not None:
+            # Kalman filter: predictive tracking (zero lag)
+            bbox_array = np.array([x, y, w, h], dtype=np.float32)
+            smoothed = self.kalman_tracker.update(bbox_array)
+            x, y, w, h = map(int, smoothed)
+            logger.debug(f"Kalman tracking: ({x}, {y}, {w}, {h})")
+            
+        elif self.tracker_type == "velocity" and self.velocity_predictor is not None:
+            # Velocity predictor: momentum-based tracking
+            bbox_array = np.array([x, y, w, h], dtype=np.float32)
+            smoothed = self.velocity_predictor.update(bbox_array)
+            x, y, w, h = map(int, smoothed)
+            logger.debug(f"Velocity tracking: ({x}, {y}, {w}, {h})")
+            
+        elif self.tracker_type == "exponential":
+            # Exponential smoothing: reactive (has lag)
+            if self.prev_bbox is not None and self.smoothing_factor > 0:
+                alpha = self.smoothing_factor
+                x = int(alpha * self.prev_bbox['x'] + (1 - alpha) * x)
+                y = int(alpha * self.prev_bbox['y'] + (1 - alpha) * y)
+                w = int(alpha * self.prev_bbox['w'] + (1 - alpha) * w)
+                h = int(alpha * self.prev_bbox['h'] + (1 - alpha) * h)
+            
+            # Store current bbox for next frame
+            self.prev_bbox = {'x': x, 'y': y, 'w': w, 'h': h}
         
-        # Store current bbox for next frame
-        self.prev_bbox = {'x': x, 'y': y, 'w': w, 'h': h}
+        # else: tracker_type == "none" → use raw bbox (instant, no smoothing)
         
         # Calculate mask position and size (BIGGER MASK)
         mask_w = int(0.95 * w)  # 95% of face width (was 90%)

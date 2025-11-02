@@ -182,8 +182,11 @@ def webcam_command(args):
     actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     print(f"✓ Camera opened: {actual_w}×{actual_h}")
     
-    # FPS counter
+    # FPS counter and limiter
     fps_counter = create_fps_counter()
+    target_fps = args.fps
+    frame_time = 1.0 / target_fps
+    print(f"✓ Target FPS: {target_fps}")
     
     print("\n" + "="*60)
     print("Controls:")
@@ -202,6 +205,8 @@ def webcam_command(args):
     
     try:
         while True:
+            loop_start = time.time()
+            
             # Read frame
             ret, frame = cap.read()
             if not ret:
@@ -224,12 +229,19 @@ def webcam_command(args):
             # Update FPS
             fps = fps_counter()
             
+            # Frame rate limiting (BEFORE display to ensure stable FPS)
+            loop_time = time.time() - loop_start
+            sleep_time = frame_time - loop_time
+            
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+            
             # Draw FPS and info
             result = draw_fps(result, fps, position=(10, 30))
             
             cv2.putText(
                 result,
-                f"Time: {processing_ms:.1f}ms",
+                f"Time: {processing_ms:.1f}ms (target: {target_fps} FPS)",
                 (10, 60),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.6,
@@ -353,6 +365,8 @@ Examples:
                               help="Show bounding boxes")
     webcam_parser.add_argument("--width", type=int, help="Camera width")
     webcam_parser.add_argument("--height", type=int, help="Camera height")
+    webcam_parser.add_argument("--fps", type=int, default=30,
+                              help="Target FPS (default 30)")
     
     # Parse arguments
     args = parser.parse_args()
