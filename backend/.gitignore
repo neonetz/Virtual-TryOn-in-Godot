@@ -1,0 +1,92 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb_temp
+
+# Models (large files - download separately)
+models/*.pkl
+models/*.joblib
+
+# Keep config
+!models/config.json
+
+# Dataset (large files - keep separate)
+datasets/faces/*
+datasets/non_faces/*
+datasets/processed/*
+
+# Keep dataset structure
+!datasets/faces/.gitkeep
+!datasets/non_faces/.gitkeep
+!datasets/processed/.gitkeep
+
+# Test outputs
+output/
+results/
+screenshots/
+*.jpg
+*.jpeg
+*.png
+!assets/masks/*.png
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Performance profiling
+*.prof
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*
+
+# pytest
+.pytest_cache/
+
+# mypy
+.mypy_cache/
