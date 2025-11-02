@@ -135,12 +135,9 @@ def webcam_command(args):
     
     # Get cascade paths
     cascade_face = get_opencv_data_path("haarcascade_frontalface_default.xml")
+    
+    # Don't use Haar eye cascade - use custom ORB detector instead
     cascade_eye = None
-    if args.enable_rotation:
-        try:
-            cascade_eye = get_opencv_data_path("haarcascade_eye.xml")
-        except FileNotFoundError:
-            print("⚠ Warning: Eye cascade not found, rotation disabled")
     
     # Initialize system
     print("\nInitializing detection system...")
@@ -148,6 +145,7 @@ def webcam_command(args):
     print(f"  BoVW encoder: {args.bovw_encoder}")
     print(f"  Scaler: {args.scaler}")
     print(f"  Mask: {args.mask}")
+    print(f"  Eye detection: Custom ORB detector (no Haar cascade)")
     
     try:
         system = FaceDetectionSystem(
@@ -157,7 +155,9 @@ def webcam_command(args):
             cascade_face_path=cascade_face,
             mask_path=args.mask,
             cascade_eye_path=cascade_eye,
-            max_keypoints=args.max_keypoints
+            max_keypoints=args.max_keypoints,
+            use_custom_eye_detector=True,  # Enable custom detector
+            custom_eye_method="orb"  # Use ORB method
         )
     except Exception as e:
         print(f"✗ Error initializing system: {e}")
@@ -191,12 +191,14 @@ def webcam_command(args):
     print("  's' - Save screenshot")
     print("  'b' - Toggle bounding boxes")
     print("  'r' - Toggle rotation")
+    print("  'd' - Toggle debug info (eye detection)")
     print("="*60 + "\n")
     
     # State
     show_boxes = args.show_boxes
     enable_rotation = args.enable_rotation
     frame_count = 0
+    show_debug = False  # Toggle with 'd' key
     
     try:
         while True:
@@ -213,7 +215,8 @@ def webcam_command(args):
                 frame,
                 enable_rotation=enable_rotation,
                 alpha_multiplier=args.alpha,
-                draw_boxes=show_boxes
+                draw_boxes=show_boxes,
+                draw_eye_debug=show_debug
             )
             
             processing_ms = (time.time() - start_time) * 1000
@@ -244,6 +247,11 @@ def webcam_command(args):
             if enable_rotation:
                 cv2.putText(result, "[Rotation: ON]", (10, status_y), 
                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+                status_y += 25
+            
+            if show_debug:
+                cv2.putText(result, "[Debug: ON]", (10, status_y), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 255), 1)
             
             # Show frame
             if args.show:
@@ -265,6 +273,9 @@ def webcam_command(args):
             elif key == ord('r'):
                 enable_rotation = not enable_rotation
                 print(f"\n→ Rotation: {'ON' if enable_rotation else 'OFF'}")
+            elif key == ord('d'):
+                show_debug = not show_debug
+                print(f"\n→ Debug mode (eye detection): {'ON' if show_debug else 'OFF'}")
             
             frame_count += 1
     

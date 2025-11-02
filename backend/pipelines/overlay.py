@@ -1,6 +1,7 @@
 """
 MASK Overlay Module
 Alpha-blending face mask on detected faces with optional rotation based on eye detection
+Supports both Haar Cascade and Custom Eye Detector
 """
 
 import cv2
@@ -15,15 +16,23 @@ class MaskOverlay:
     """
     Handle face MASK overlay with alpha blending and optional rotation
     Mask is positioned on lower part of face (nose-mouth-chin area)
+    Supports multiple eye detection methods
     """
     
-    def __init__(self, mask_path: str, cascade_eye_path: Optional[str] = None):
+    def __init__(self, mask_path: str, 
+                 cascade_eye_path: Optional[str] = None,
+                 smoothing_factor: float = 0.7,
+                 use_custom_eye_detector: bool = False,
+                 custom_eye_method: str = "orb"):
         """
         Initialize mask overlay
         
         Args:
             mask_path: Path to mask PNG with alpha channel (RGBA)
             cascade_eye_path: Optional path to haarcascade_eye.xml for rotation
+            smoothing_factor: Temporal smoothing (0=no smooth, 1=full smooth). Default 0.7 (high stability)
+            use_custom_eye_detector: If True, use custom eye detector instead of Haar
+            custom_eye_method: Method for custom detector ("orb", "hough", "contour", "template")
         """
         # Load mask with alpha channel
         self.mask_rgba = cv2.imread(mask_path, cv2.IMREAD_UNCHANGED)
@@ -37,23 +46,41 @@ class MaskOverlay:
         self.mask_h, self.mask_w = self.mask_rgba.shape[:2]
         logger.info(f"✓ Mask loaded: {mask_path} ({self.mask_w}×{self.mask_h})")
         
-        # Load eye cascade for rotation (optional)
+        # Temporal smoothing for stable overlay (reduce flickering)
+        self.smoothing_factor = smoothing_factor
+        self.prev_bbox = None
+        
+        # Eye detection setup
+        self.use_custom_eye_detector = use_custom_eye_detector
         self.eye_cascade = None
-        if cascade_eye_path is not None:
+        self.custom_eye_detector = None
+        
+        if use_custom_eye_detector:
+            # Use custom eye detector
             try:
-                self.eye_cascade = cv2.CascadeClassifier(cascade_eye_path)
-                if self.eye_cascade.empty():
-                    logger.warning(f"Eye cascade is empty: {cascade_eye_path}")
-                    self.eye_cascade = None
-                else:
-                    logger.info(f"✓ Eye cascade loaded for rotation")
+                from .eye_detector import CustomEyeDetector
+                self.custom_eye_detector = CustomEyeDetector(method=custom_eye_method)
+                logger.info(f"✓ Custom eye detector loaded (method: {custom_eye_method})")
             except Exception as e:
-                logger.warning(f"Cannot load eye cascade: {e}")
-                self.eye_cascade = None
+                logger.warning(f"Cannot load custom eye detector: {e}")
+                self.custom_eye_detector = None
+        else:
+            # Use Haar cascade (traditional)
+            if cascade_eye_path is not None:
+                try:
+                    self.eye_cascade = cv2.CascadeClassifier(cascade_eye_path)
+                    if self.eye_cascade.empty():
+                        logger.warning(f"Eye cascade is empty: {cascade_eye_path}")
+                        self.eye_cascade = None
+                    else:
+                        logger.info(f"✓ Haar eye cascade loaded")
+                except Exception as e:
+                    logger.warning(f"Cannot load eye cascade: {e}")
+                    self.eye_cascade = None
     
     def detect_eyes(self, face_roi: np.ndarray) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
         """
-        Detect two eyes in face ROI
+        Detect two eyes in face ROI using configured method with geometry validation
         
         Args:
             face_roi: Face region image (BGR)
@@ -61,6 +88,14 @@ class MaskOverlay:
         Returns:
             ((left_eye_x, left_eye_y), (right_eye_x, right_eye_y)) or None
         """
+        # Use custom detector if enabled
+        if self.use_custom_eye_detector and self.custom_eye_detector is not None:
+            eyes = self.custom_eye_detector.detect(face_roi)
+            if eyes is not None and self._validate_eye_geometry(eyes, face_roi.shape):
+                return eyes
+            return None
+        
+        # Fallback to Haar cascade
         if self.eye_cascade is None:
             return None
         
@@ -70,30 +105,106 @@ class MaskOverlay:
         else:
             gray = face_roi.copy()
         
-        # Detect eyes
+        # Enhance contrast for better detection
+        gray = cv2.equalizeHist(gray)
+        
+        # Focus on upper half of face (eye region)
+        h, w = gray.shape[:2]
+        eye_region = gray[:int(h * 0.7), :]  # Top 70% of face
+        
+        # Detect eyes with relaxed parameters
         eyes = self.eye_cascade.detectMultiScale(
-            gray,
-            scaleFactor=1.1,
-            minNeighbors=5,
-            minSize=(20, 20)
+            eye_region,
+            scaleFactor=1.05,  # Smaller steps for better detection
+            minNeighbors=3,    # Relaxed for better detection
+            minSize=(int(w * 0.1), int(h * 0.08)),  # Relative to face size
+            maxSize=(int(w * 0.3), int(h * 0.25))
         )
         
         if len(eyes) < 2:
+            logger.debug(f"Eye detection: found {len(eyes)} eyes (need 2)")
             return None
         
         # Sort by x coordinate to get left and right eyes
         eyes = sorted(eyes, key=lambda e: e[0])
         
-        # Take first two (leftmost = left eye, next = right eye)
-        left_eye = eyes[0]
-        right_eye = eyes[1]
+        # Try to find best pair of eyes
+        best_pair = None
+        best_score = 0
         
-        # Calculate eye centers
-        left_center = (left_eye[0] + left_eye[2] // 2, left_eye[1] + left_eye[3] // 2)
-        right_center = (right_eye[0] + right_eye[2] // 2, right_eye[1] + right_eye[3] // 2)
+        for i in range(len(eyes) - 1):
+            for j in range(i + 1, len(eyes)):
+                left_eye = eyes[i]
+                right_eye = eyes[j]
+                
+                # Calculate centers
+                left_center = (left_eye[0] + left_eye[2] // 2, left_eye[1] + left_eye[3] // 2)
+                right_center = (right_eye[0] + right_eye[2] // 2, right_eye[1] + right_eye[3] // 2)
+                
+                # Validate geometry
+                eyes_pair = (left_center, right_center)
+                if self._validate_eye_geometry(eyes_pair, (h, w, 3)):
+                    # Score based on horizontal alignment and spacing
+                    y_diff = abs(left_center[1] - right_center[1])
+                    x_diff = right_center[0] - left_center[0]
+                    
+                    # Good eyes should be: horizontally aligned, reasonable spacing
+                    score = 1.0 / (1.0 + y_diff) * x_diff
+                    
+                    if score > best_score:
+                        best_score = score
+                        best_pair = eyes_pair
         
-        logger.debug(f"Eyes detected: left={left_center}, right={right_center}")
-        return (left_center, right_center)
+        if best_pair is not None:
+            logger.debug(f"Eyes detected (Haar): left={best_pair[0]}, right={best_pair[1]}")
+            return best_pair
+        
+        logger.debug("Eye detection: no valid eye pair found")
+        return None
+    
+    def _validate_eye_geometry(self, eyes: Tuple[Tuple[int, int], Tuple[int, int]], 
+                              face_shape: Tuple) -> bool:
+        """
+        Validate if detected eyes have reasonable geometry
+        
+        Args:
+            eyes: ((left_x, left_y), (right_x, right_y))
+            face_shape: Shape of face ROI (h, w, c)
+            
+        Returns:
+            True if geometry is reasonable
+        """
+        left_eye, right_eye = eyes
+        h, w = face_shape[:2]
+        
+        # Calculate distances
+        dx = right_eye[0] - left_eye[0]
+        dy = right_eye[1] - left_eye[1]
+        
+        # Eyes should be horizontally separated
+        if dx <= 0:
+            logger.debug("Eye validation: right eye not to the right of left eye")
+            return False
+        
+        # Eyes should be roughly on same horizontal line
+        # Allow up to 20% vertical difference relative to horizontal distance
+        if abs(dy) > dx * 0.2:
+            logger.debug(f"Eye validation: too much vertical misalignment (dy={dy}, dx={dx})")
+            return False
+        
+        # Inter-eye distance should be reasonable (20% to 60% of face width)
+        eye_distance = np.sqrt(dx**2 + dy**2)
+        if eye_distance < w * 0.2 or eye_distance > w * 0.6:
+            logger.debug(f"Eye validation: unreasonable distance ({eye_distance:.1f} px, face_w={w})")
+            return False
+        
+        # Eyes should be in upper half of face
+        avg_y = (left_eye[1] + right_eye[1]) / 2
+        if avg_y > h * 0.6:
+            logger.debug(f"Eye validation: eyes too low (y={avg_y:.1f}, face_h={h})")
+            return False
+        
+        return True
     
     def calculate_rotation_angle(self, left_eye: Tuple[int, int], 
                                 right_eye: Tuple[int, int]) -> float:
@@ -158,12 +269,12 @@ class MaskOverlay:
         """
         Apply mask overlay on detected face
         
-        Mask positioning:
-        - mask_w = 0.9 × face_w
-        - mask_h = 0.55 × face_h
-        - mask_x = face_x + 0.05 × face_w
-        - mask_y = face_y + 0.40 × face_h
-        (covers nose-mouth-chin area)
+        Mask positioning (LARGER MASK for full face coverage):
+        - mask_w = 0.95 × face_w  (was 0.9)
+        - mask_h = 0.75 × face_h  (was 0.55)
+        - mask_x = face_x + 0.025 × face_w
+        - mask_y = face_y + 0.20 × face_h
+        (covers from forehead to chin)
         
         Args:
             img: Input image (BGR)
@@ -176,11 +287,22 @@ class MaskOverlay:
         """
         x, y, w, h = face_bbox['x'], face_bbox['y'], face_bbox['w'], face_bbox['h']
         
-        # Calculate mask position and size
-        mask_w = int(0.9 * w)
-        mask_h = int(0.55 * h)
-        mask_x = int(x + 0.05 * w)
-        mask_y = int(y + 0.40 * h)
+        # Apply temporal smoothing to reduce flickering
+        if self.prev_bbox is not None and self.smoothing_factor > 0:
+            alpha = self.smoothing_factor
+            x = int(alpha * self.prev_bbox['x'] + (1 - alpha) * x)
+            y = int(alpha * self.prev_bbox['y'] + (1 - alpha) * y)
+            w = int(alpha * self.prev_bbox['w'] + (1 - alpha) * w)
+            h = int(alpha * self.prev_bbox['h'] + (1 - alpha) * h)
+        
+        # Store current bbox for next frame
+        self.prev_bbox = {'x': x, 'y': y, 'w': w, 'h': h}
+        
+        # Calculate mask position and size (BIGGER MASK)
+        mask_w = int(0.95 * w)  # 95% of face width (was 90%)
+        mask_h = int(0.75 * h)  # 75% of face height (was 55%)
+        mask_x = int(x + 0.025 * w)  # Centered horizontally
+        mask_y = int(y + 0.20 * h)   # Start higher (was 0.40)
         
         # Check if mask is within image bounds
         img_h, img_w = img.shape[:2]
@@ -198,7 +320,7 @@ class MaskOverlay:
         
         # Get rotation angle if enabled
         rotation_angle = 0.0
-        if enable_rotation and self.eye_cascade is not None:
+        if enable_rotation and (self.eye_cascade is not None or self.custom_eye_detector is not None):
             # Extract face ROI for eye detection
             face_roi = img[y:y+h, x:x+w]
             eyes = self.detect_eyes(face_roi)
@@ -211,9 +333,10 @@ class MaskOverlay:
         # Prepare mask
         mask_to_use = self.mask_rgba.copy()
         
-        # Rotate if needed
-        if abs(rotation_angle) > 2.0:  # Only rotate if angle is significant
+        # Rotate if needed (LOWER THRESHOLD - rotate even for small angles)
+        if abs(rotation_angle) > 1.0:  # Changed from 2.0 to 1.0 - more sensitive
             mask_to_use = self.rotate_mask(mask_to_use, rotation_angle)
+            logger.debug(f"Rotating mask by {rotation_angle:.1f}°")
         
         # Resize mask to target size
         mask_resized = cv2.resize(mask_to_use, (mask_w, mask_h), interpolation=cv2.INTER_AREA)
