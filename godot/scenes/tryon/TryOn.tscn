@@ -1,19 +1,42 @@
-[gd_scene load_steps=2 format=3 uid="uid://bjdn7b50pm2mj"]
+[gd_scene load_steps=9 format=3 uid="uid://bjdn7b50pm2mj"]
 
+[ext_resource type="Script" uid="uid://djwm12vnahg15" path="res://godot/scripts/tryon/tryon.gd" id="1_hxnyr"]
+[ext_resource type="Texture2D" uid="uid://csjv5uqvmpj6j" path="res://godot/assets/backgrounds/BlackWallpaper.png" id="1_svasq"]
 [ext_resource type="Script" uid="uid://cmf1h45pqd8m4" path="res://godot/scripts/tryon/udp_video_receiver.gd" id="2_0ss4v"]
+[ext_resource type="FontFile" uid="uid://bev3u58d1b0rw" path="res://godot/assets/fonts/Poppins-Regular.ttf" id="3_0ss4v"]
+[ext_resource type="Texture2D" uid="uid://dbsikrsglr02o" path="res://godot/assets/backgrounds/FogBorderr.png" id="4_dtodl"]
+[ext_resource type="Texture2D" uid="uid://cbw0y1mwrggts" path="res://godot/assets/backgrounds/GrayWallpaper.jpg" id="4_ptgdl"]
+[ext_resource type="Texture2D" uid="uid://dbhf6c0mrc8ak" path="res://godot/assets/ui/Back_Normal.png" id="6_2ycv3"]
+[ext_resource type="Texture2D" uid="uid://befhvx5rigs7f" path="res://godot/assets/ui/Back_Hover.png" id="7_hxnyr"]
 
 [node name="TryOn" type="Control"]
 layout_mode = 3
 anchors_preset = 0
+script = ExtResource("1_hxnyr")
+
+[node name="BlackWallpaper" type="Sprite2D" parent="."]
+position = Vector2(956, 542)
+scale = Vector2(1.2575, 1.19479)
+texture = ExtResource("1_svasq")
+
+[node name="GrayWallpaper" type="Sprite2D" parent="."]
+position = Vector2(764.375, 585.25)
+scale = Vector2(4.46405, 4.6875)
+texture = ExtResource("4_ptgdl")
 
 [node name="VideoDisplay" type="TextureRect" parent="."]
 layout_mode = 0
-offset_left = 50.0
-offset_top = 144.0
-offset_right = 1330.0
-offset_bottom = 864.0
+offset_left = 120.75
+offset_top = 229.0
+offset_right = 1400.75
+offset_bottom = 949.0
 expand_mode = 1
 stretch_mode = 5
+
+[node name="FogBorderr" type="Sprite2D" parent="."]
+position = Vector2(766.313, 587.875)
+scale = Vector2(0.53475, 0.3161)
+texture = ExtResource("4_dtodl")
 
 [node name="UDPReceiver" type="Node" parent="."]
 script = ExtResource("2_0ss4v")
@@ -21,18 +44,36 @@ script = ExtResource("2_0ss4v")
 [node name="UI" type="CanvasLayer" parent="."]
 
 [node name="FPSLabel" type="Label" parent="UI"]
-offset_right = 40.0
-offset_bottom = 23.0
+offset_left = 98.75
+offset_top = 163.0
+offset_right = 143.75
+offset_bottom = 186.0
+theme_override_fonts/font = ExtResource("3_0ss4v")
 text = "FPS: 0"
 
 [node name="FaceCountLabel" type="Label" parent="UI"]
-offset_top = 53.0
-offset_right = 61.0
-offset_bottom = 76.0
+offset_left = 705.75
+offset_top = 167.0
+offset_right = 770.75
+offset_bottom = 190.0
+theme_override_fonts/font = ExtResource("3_0ss4v")
 text = "Faces: 0"
 
 [node name="StatusLabel" type="Label" parent="UI"]
-offset_top = 25.0
-offset_right = 101.0
-offset_bottom = 48.0
+offset_left = 1240.0
+offset_top = 166.0
+offset_right = 1344.0
+offset_bottom = 189.0
+theme_override_fonts/font = ExtResource("3_0ss4v")
 text = "Connecting..."
+
+[node name="Button_manager" type="Node" parent="."]
+
+[node name="Back" type="TextureButton" parent="Button_manager"]
+offset_left = 24.0
+offset_top = 29.0
+offset_right = 184.0
+offset_bottom = 91.0
+texture_normal = ExtResource("6_2ycv3")
+texture_pressed = ExtResource("7_hxnyr")
+texture_hover = ExtResource("7_hxnyr")
