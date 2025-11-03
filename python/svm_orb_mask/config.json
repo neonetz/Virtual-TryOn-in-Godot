@@ -1,0 +1,39 @@
+{
+  "model": {
+    "models_dir": "models",
+    "svm_model": "svm_model.pkl",
+    "codebook": "codebook.pkl",
+    "scaler": "scaler.pkl"
+  },
+  "detection": {
+    "confidence_threshold": 0.5,
+    "nms_threshold": 0.3,
+    "haar_cascade": {
+      "scale_factor": 1.1,
+      "min_neighbors": 5,
+      "min_size": [30, 30]
+    }
+  },
+  "features": {
+    "orb": {
+      "n_keypoints": 500,
+      "roi_size": [128, 128]
+    },
+    "bovw": {
+      "codebook_size": 256
+    }
+  },
+  "mask": {
+    "default_mask": "assets/mask.png",
+    "scale_factor": 1.2,
+    "vertical_offset": 0.3,
+    "use_rotation": true
+  },
+  "display": {
+    "draw_boxes": true,
+    "box_color": [0, 255, 0],
+    "box_thickness": 2,
+    "show_confidence": true,
+    "show_fps": true
+  }
+}
