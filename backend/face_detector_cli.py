@@ -335,7 +335,7 @@ Examples:
                        help="Path to BoVW encoder (k-means codebook)")
     parser.add_argument("--scaler", default="models/scaler.pkl",
                        help="Path to feature scaler")
-    parser.add_argument("--mask", default="assets/mask.png",
+    parser.add_argument("--mask", default="assets/masks/mask-1.png",
                        help="Path to mask PNG with alpha channel")
     parser.add_argument("--max-keypoints", type=int, default=500,
                        help="Maximum ORB keypoints per ROI")
