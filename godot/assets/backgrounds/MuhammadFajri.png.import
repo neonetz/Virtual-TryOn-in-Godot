@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b8q0y1njmp5x"
-path="res://.godot/imported/WallpaperHalloween.png-29f04de32e7a0452dc67c528c1801cb8.ctex"
+uid="uid://cwb40ve3hysbr"
+path="res://.godot/imported/MuhammadFajri.png-216172f885190327d9eac60f25c56d7f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://godot/assets/WallpaperHalloween.png"
-dest_files=["res://.godot/imported/WallpaperHalloween.png-29f04de32e7a0452dc67c528c1801cb8.ctex"]
+source_file="res://godot/assets/backgrounds/MuhammadFajri.png"
+dest_files=["res://.godot/imported/MuhammadFajri.png-216172f885190327d9eac60f25c56d7f.ctex"]
 
 [params]
 

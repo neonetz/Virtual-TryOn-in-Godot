@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bnb4yyxtvguf4"
-path="res://.godot/imported/RioVoorhess.png-fce03aee06f8703b744796116be33907.ctex"
+uid="uid://dgfcscibs81lx"
+path="res://.godot/imported/mask-3.png-ab7d6863440a1498cc09352a9b626b90.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://godot/assets/backgrounds/RioVoorhess.png"
-dest_files=["res://.godot/imported/RioVoorhess.png-fce03aee06f8703b744796116be33907.ctex"]
+source_file="res://backend/assets/masks/mask-3.png"
+dest_files=["res://.godot/imported/mask-3.png-ab7d6863440a1498cc09352a9b626b90.ctex"]
 
 [params]
 

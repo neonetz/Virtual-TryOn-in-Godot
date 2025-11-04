@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bnb4yyxtvguf4"
-path="res://.godot/imported/RioVoorhess.png-fce03aee06f8703b744796116be33907.ctex"
+uid="uid://0hlvqoooudje"
+path="res://.godot/imported/RioAgasta.png-3da21d011ad6bc065d2e2aa97f2ec94f.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://godot/assets/backgrounds/RioVoorhess.png"
-dest_files=["res://.godot/imported/RioVoorhess.png-fce03aee06f8703b744796116be33907.ctex"]
+source_file="res://godot/assets/backgrounds/RioAgasta.png"
+dest_files=["res://.godot/imported/RioAgasta.png-3da21d011ad6bc065d2e2aa97f2ec94f.ctex"]
 
 [params]
 
