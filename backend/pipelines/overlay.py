@@ -479,10 +479,10 @@ class MaskOverlay:
         
         # Try mask in masks directory (backend/assets/masks/)
         if self.mask_dir:
-            mask_path = os.path.join(self.mask_dir, "masks", mask_filename)
+            mask_path = os.path.join(self.mask_dir, mask_filename)
         else:
             # Fallback to assets/masks folder
-            mask_path = os.path.join("assets", "masks", mask_filename)
+            mask_path = os.path.join("assets", mask_filename)
         
         if not os.path.exists(mask_path):
             logger.error(f"Mask not found: {mask_path}")
