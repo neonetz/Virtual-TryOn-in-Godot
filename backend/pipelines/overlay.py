@@ -6,6 +6,8 @@ Supports both Haar Cascade and Custom Eye Detector
 
 import cv2
 import numpy as np
+import json
+import os
 from typing import Dict, Tuple, Optional
 import logging
 
@@ -117,6 +119,12 @@ class MaskOverlay:
                 except Exception as e:
                     logger.warning(f"Cannot load eye cascade: {e}")
                     self.eye_cascade = None
+        
+        # Load mask configurations
+        self.mask_configs = self._load_mask_configs()
+        self.current_mask_config = self._get_mask_config(os.path.basename(mask_path))
+        
+        logger.info(f"✓ Mask config loaded: {self.current_mask_config}")
     
     def detect_eyes(self, face_roi: np.ndarray) -> Optional[Tuple[Tuple[int, int], Tuple[int, int]]]:
         """
@@ -264,6 +272,32 @@ class MaskOverlay:
         angle = np.degrees(np.arctan2(dy, dx))
         return angle
     
+    def _load_mask_configs(self) -> Dict:
+        """Load mask configuration from JSON file"""
+        config_path = os.path.join("assets", "masks", "config.json")
+        config_path = os.path.normpath(config_path)
+        
+        try:
+            with open(config_path, 'r') as f:
+                configs = json.load(f)
+            logger.info(f"✓ Loaded mask configs from: {config_path}")
+            return configs
+        except Exception as e:
+            logger.warning(f"Could not load mask config: {e}")
+            return {}
+
+    def _get_mask_config(self, mask_filename: str) -> Dict:
+        """Get configuration for specific mask"""
+        default_config = {
+            "scale_w": 1,
+            "scale_h": 1,
+            "offset_x": 1,
+            "offset_y": 1,
+            "description": "Default mask"
+        }
+        
+        return self.mask_configs.get(mask_filename, default_config)
+
     def rotate_mask(self, mask_rgba: np.ndarray, angle: float) -> np.ndarray:
         """
         Rotate mask by angle around center
@@ -355,12 +389,15 @@ class MaskOverlay:
             self.prev_bbox = {'x': x, 'y': y, 'w': w, 'h': h}
         
         # else: tracker_type == "none" → use raw bbox (instant, no smoothing)
+
+        # Get current mask configuration
+        config = self.current_mask_config
         
         # Calculate mask position and size (BIGGER MASK)
-        mask_w = int(0.95 * w)  # 95% of face width (was 90%)
-        mask_h = int(0.75 * h)  # 75% of face height (was 55%)
-        mask_x = int(x + 0.025 * w)  # Centered horizontally
-        mask_y = int(y + 0.20 * h)   # Start higher (was 0.40)
+        mask_w = int(config['scale_w'] * w)
+        mask_h = int(config['scale_h'] * h)
+        mask_x = int(x + config['offset_x'] * w)
+        mask_y = int(y + config['offset_y'] * h)
         
         # Check if mask is within image bounds
         img_h, img_w = img.shape[:2]
@@ -423,6 +460,8 @@ class MaskOverlay:
         # Place blended region back into image
         result = img.copy()
         result[mask_y:mask_y+h_min, mask_x:mask_x+w_min] = blended
+
+        logger.debug(f"Applied {os.path.basename(self.mask_path)} at ({mask_x}, {mask_y}) size ({mask_w}×{mask_h})")
         
         return result
     
@@ -440,9 +479,9 @@ class MaskOverlay:
         
         # Try mask in masks directory (backend/assets/masks/)
         if self.mask_dir:
-            mask_path = os.path.join(self.mask_dir, mask_filename)
+            mask_path = os.path.join(self.mask_dir, "masks", mask_filename)
         else:
-            # Fallback to assets folder
+            # Fallback to assets/masks folder
             mask_path = os.path.join("assets", "masks", mask_filename)
         
         if not os.path.exists(mask_path):
@@ -460,12 +499,15 @@ class MaskOverlay:
             logger.error(f"Mask must have alpha channel (RGBA)")
             return False
         
-        # Update mask
+        # Update mask and configuration
         self.mask_rgba = new_mask
         self.mask_h, self.mask_w = new_mask.shape[:2]
         self.mask_path = mask_path
+        self.current_mask_config = self._get_mask_config(mask_filename)
         
         logger.info(f"✓ Mask changed to: {mask_filename} ({self.mask_w}×{self.mask_h})")
+        logger.info(f"✓ Config: scale=({self.current_mask_config['scale_w']:.2f}, {self.current_mask_config['scale_h']:.2f}), "
+                   f"offset=({self.current_mask_config['offset_x']:.3f}, {self.current_mask_config['offset_y']:.3f})")
         return True
     
     def apply_mask_batch(self, img: np.ndarray, face_bboxes: list,
