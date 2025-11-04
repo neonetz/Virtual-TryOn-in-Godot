@@ -39,6 +39,7 @@ class WebcamUDPServer:
                  camera_id: int = 0,
                  host: str = "127.0.0.1",
                  port: int = 5555,
+                 command_port: int = 5556,
                  jpeg_quality: int = 85,
                  target_fps: int = 30):
         """
@@ -49,6 +50,7 @@ class WebcamUDPServer:
             camera_id: Webcam device ID
             host: Godot client host
             port: Godot client port
+            command_port: Port for receiving commands from Godot
             jpeg_quality: JPEG compression quality (0-100)
             target_fps: Target frame rate
         """
@@ -56,13 +58,21 @@ class WebcamUDPServer:
         self.camera_id = camera_id
         self.host = host
         self.port = port
+        self.command_port = command_port
         self.jpeg_quality = jpeg_quality
         self.target_fps = target_fps
         self.frame_time = 1.0 / target_fps
         
-        # Create UDP socket
+        # Create UDP socket for sending frames
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         logger.info(f"✓ UDP socket created (target: {host}:{port})")
+        
+        # Create UDP socket for receiving commands
+        self.command_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.command_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.command_socket.bind(("0.0.0.0", command_port))
+        self.command_socket.setblocking(False)  # Non-blocking
+        logger.info(f"✓ UDP command listener created (port: {command_port})")
         
         # Statistics
         self.frame_count = 0
@@ -161,6 +171,38 @@ class WebcamUDPServer:
             logger.error(f"Send error: {e}")
             self.error_count += 1
     
+    def check_commands(self):
+        """Check for incoming UDP commands from Godot"""
+        try:
+            # Non-blocking receive
+            data, addr = self.command_socket.recvfrom(1024)
+            
+            # Parse JSON command
+            json_str = data.decode('utf-8')
+            command = json.loads(json_str)
+            
+            logger.info(f"Received command from {addr}: {command}")
+            
+            # Handle command
+            cmd_type = command.get("command")
+            
+            if cmd_type == "change_mask":
+                mask_filename = command.get("mask")
+                if mask_filename:
+                    success = self.detection_system.mask_overlay.change_mask(mask_filename)
+                    if success:
+                        logger.info(f"✓ Mask changed to: {mask_filename}")
+                    else:
+                        logger.error(f"✗ Failed to change mask to: {mask_filename}")
+            else:
+                logger.warning(f"Unknown command: {cmd_type}")
+                
+        except BlockingIOError:
+            # No data available (expected for non-blocking socket)
+            pass
+        except Exception as e:
+            logger.error(f"Command processing error: {e}")
+    
     def run(self, enable_rotation: bool = True, alpha: float = 0.95, show_preview: bool = False):
         """
         Run server main loop
@@ -187,6 +229,9 @@ class WebcamUDPServer:
         try:
             while True:
                 loop_start = time.time()
+                
+                # Check for incoming commands from Godot
+                self.check_commands()
                 
                 # Capture frame
                 ret, frame = self.cap.read()
@@ -313,8 +358,8 @@ Examples:
                        help="Path to BoVW encoder")
     parser.add_argument("--scaler", default="models/scaler.pkl",
                        help="Path to scaler")
-    parser.add_argument("--mask", default="assets/mask.png",
-                       help="Path to mask PNG")
+    parser.add_argument("--mask", default="assets/masks/mask-1.png",
+                       help="Path to mask PNG (default: mask-1.png)")
     
     # Camera settings
     parser.add_argument("--camera", type=int, default=0,

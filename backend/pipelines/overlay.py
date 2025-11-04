@@ -24,7 +24,7 @@ class MaskOverlay:
                  smoothing_factor: float = 0.0,  # Smooting
                  use_custom_eye_detector: bool = False,
                  custom_eye_method: str = "orb",
-                 tracker_type: str = "exponential"):
+                 tracker_type: str = "none"):
         """
         Initialize mask overlay
         
@@ -36,6 +36,9 @@ class MaskOverlay:
             custom_eye_method: Method for custom detector ("orb", "hough", "contour", "template")
             tracker_type: Tracking type - "exponential", "kalman", "velocity", or "none"
         """
+        # Store mask path for dynamic reloading
+        self.mask_path = mask_path
+        
         # Load mask with alpha channel
         self.mask_rgba = cv2.imread(mask_path, cv2.IMREAD_UNCHANGED)
         
@@ -47,6 +50,13 @@ class MaskOverlay:
         
         self.mask_h, self.mask_w = self.mask_rgba.shape[:2]
         logger.info(f"✓ Mask loaded: {mask_path} ({self.mask_w}×{self.mask_h})")
+        
+        # Mask directory for dynamic switching
+        self.mask_dir = None
+        import os
+        if os.path.exists(mask_path):
+            self.mask_dir = os.path.dirname(mask_path)
+            logger.info(f"✓ Mask directory: {self.mask_dir}")
         
         # Temporal smoothing/tracking setup
         self.tracker_type = tracker_type
@@ -415,6 +425,48 @@ class MaskOverlay:
         result[mask_y:mask_y+h_min, mask_x:mask_x+w_min] = blended
         
         return result
+    
+    def change_mask(self, mask_filename: str) -> bool:
+        """
+        Change current mask to a different one
+        
+        Args:
+            mask_filename: Name of mask file (e.g., "mask-2.png")
+            
+        Returns:
+            True if successful, False otherwise
+        """
+        import os
+        
+        # Try mask in masks directory (backend/assets/masks/)
+        if self.mask_dir:
+            mask_path = os.path.join(self.mask_dir, mask_filename)
+        else:
+            # Fallback to assets folder
+            mask_path = os.path.join("assets", "masks", mask_filename)
+        
+        if not os.path.exists(mask_path):
+            logger.error(f"Mask not found: {mask_path}")
+            return False
+        
+        # Load new mask
+        new_mask = cv2.imread(mask_path, cv2.IMREAD_UNCHANGED)
+        
+        if new_mask is None:
+            logger.error(f"Cannot load mask: {mask_path}")
+            return False
+        
+        if new_mask.shape[2] != 4:
+            logger.error(f"Mask must have alpha channel (RGBA)")
+            return False
+        
+        # Update mask
+        self.mask_rgba = new_mask
+        self.mask_h, self.mask_w = new_mask.shape[:2]
+        self.mask_path = mask_path
+        
+        logger.info(f"✓ Mask changed to: {mask_filename} ({self.mask_w}×{self.mask_h})")
+        return True
     
     def apply_mask_batch(self, img: np.ndarray, face_bboxes: list,
                         alpha_multiplier: float = 0.95,

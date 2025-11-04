@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3 uid="uid://bjdn7b50pm2mj"]
+[gd_scene load_steps=10 format=3 uid="uid://bjdn7b50pm2mj"]
 
 [ext_resource type="Script" uid="uid://djwm12vnahg15" path="res://godot/scripts/tryon/tryon.gd" id="1_hxnyr"]
 [ext_resource type="Texture2D" uid="uid://csjv5uqvmpj6j" path="res://godot/assets/backgrounds/BlackWallpaper.png" id="1_svasq"]
@@ -8,6 +8,7 @@
 [ext_resource type="Texture2D" uid="uid://cbw0y1mwrggts" path="res://godot/assets/backgrounds/GrayWallpaper.jpg" id="4_ptgdl"]
 [ext_resource type="Texture2D" uid="uid://dbhf6c0mrc8ak" path="res://godot/assets/ui/Back_Normal.png" id="6_2ycv3"]
 [ext_resource type="Texture2D" uid="uid://befhvx5rigs7f" path="res://godot/assets/ui/Back_Hover.png" id="7_hxnyr"]
+[ext_resource type="Script" uid="uid://bedoyv6igqiny" path="res://godot/scripts/tryon/mask_scroll_selector.gd" id="9_1cdbx"]
 
 [node name="TryOn" type="Control"]
 layout_mode = 3
@@ -37,6 +38,9 @@ stretch_mode = 5
 position = Vector2(766.313, 587.875)
 scale = Vector2(0.53475, 0.3161)
 texture = ExtResource("4_dtodl")
+
+[node name="MaskSelector" type="CanvasLayer" parent="."]
+script = ExtResource("9_1cdbx")
 
 [node name="UDPReceiver" type="Node" parent="."]
 script = ExtResource("2_0ss4v")
